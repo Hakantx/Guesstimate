@@ -11,7 +11,7 @@ from guesstimate.core import Ruleset
 from guesstimate.solvers import SOLVERS
 
 from .charts import write_charts
-from .harness import Config, draw_sample, run_config
+from .harness import Config, RunResult, draw_sample, run_config
 from .provenance import Provenance
 from .records import RecordStore
 from .report import build_report
@@ -72,6 +72,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--no-charts", action="store_true", help="skip matplotlib output"
     )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help=(
+            "rebuild tables and charts from an existing games.jsonl without "
+            "playing anything. Use after changing the analysis, not the data."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -96,7 +104,12 @@ def main(argv: list[str] | None = None) -> int:
     provenance = Provenance.capture(ruleset, len(sample), args.seed)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    store = RecordStore(args.out / "games.jsonl", provenance)
+    if args.report_only:
+        store = RecordStore.open_for_reading(args.out / "games.jsonl")
+        provenance = store.provenance
+        sample = draw_sample(ruleset, provenance.sample_size, provenance.seed)
+    else:
+        store = RecordStore(args.out / "games.jsonl", provenance)
 
     configs = configurations(args.solvers, args.unrestricted)
     print(
@@ -110,15 +123,21 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     for config in configs:
         config_started = time.perf_counter()
-        result = run_config(
-            config,
-            ruleset,
-            sample,
-            args.seed,
-            store=store,
-            progress=True,
-            repeats=args.baseline_repeats,
-        )
+        if args.report_only:
+            kept = [r for r in store.records() if r.config == config.name]
+            if not kept:
+                continue
+            result = RunResult(config=config, records=kept, cold_open_seconds=0.0)
+        else:
+            result = run_config(
+                config,
+                ruleset,
+                sample,
+                args.seed,
+                store=store,
+                progress=True,
+                repeats=args.baseline_repeats,
+            )
         summary = summarise(result)
         summaries.append(summary)
         guess_counts[config.name] = per_secret_guesses(result.records)

@@ -73,23 +73,39 @@ class RecordStore:
     is worse than losing the work -- the resulting numbers would look fine.
     """
 
-    def __init__(self, path: Path, provenance: Provenance) -> None:
+    def __init__(
+        self, path: Path, provenance: Provenance, *, verify: bool = True
+    ) -> None:
         self.path = path
         self.provenance = provenance
         self._records: list[GameRecord] = []
 
         if path.exists():
-            self._load()
+            self._load(verify)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("w", encoding="utf-8") as handle:
                 handle.write(json.dumps({"provenance": provenance.to_dict()}) + "\n")
 
-    def _load(self) -> None:
+    @classmethod
+    def open_for_reading(cls, path: Path) -> RecordStore:
+        """Load a finished run to re-render its tables.
+
+        The fingerprint check exists to stop *new* games being appended to a
+        run they do not belong to. Re-reading a completed run to rebuild a
+        report is a different act: the data is fixed and the analysis code has
+        moved on, which is exactly when a table most needs regenerating. Held
+        to the append rule, no report could ever be rebuilt after a commit.
+        """
+        with path.open(encoding="utf-8") as handle:
+            stored = Provenance.from_dict(json.loads(handle.readline())["provenance"])
+        return cls(path, stored, verify=False)
+
+    def _load(self, verify: bool = True) -> None:
         with self.path.open(encoding="utf-8") as handle:
             header = json.loads(handle.readline())
             stored = Provenance.from_dict(header["provenance"])
-            if stored.fingerprint() != self.provenance.fingerprint():
+            if verify and stored.fingerprint() != self.provenance.fingerprint():
                 raise ValueError(
                     f"{self.path} holds a different run -- same file, different "
                     f"commit, machine, ruleset, sample size or seed. Delete it "
