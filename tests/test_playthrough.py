@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 
 from guesstimate.core import Code, Ruleset, all_candidates, filter_candidates, score
 
-from .strategies import rulesets
+from .strategies import classic_codes, rulesets
 
 
 def play(ruleset: Ruleset, secret: Code, rng: random.Random) -> list[int]:
@@ -63,3 +63,10 @@ def test_the_surviving_set_never_grows():
 def test_the_secret_is_never_eliminated(ruleset, rng):
     secret = rng.choice(all_candidates(ruleset))
     assert play(ruleset, secret, rng)[-1] == 1
+
+
+@given(classic_codes(), st.randoms(use_true_random=False))
+def test_the_secret_is_never_eliminated_at_full_scale(secret, rng):
+    # Both the secret and the guessing are generated, on the real 3024-code
+    # game. The seeded games above are fixed regressions; this is the property.
+    assert play(Ruleset(), secret, rng)[-1] == 1

@@ -11,7 +11,14 @@ from guesstimate.core import (
     score,
 )
 
-from .strategies import rulesets, rulesets_with_two_codes
+from .strategies import (
+    SPACE_HEAVY_MAX_SPACE,
+    classic_codes,
+    rulesets,
+    rulesets_with_two_codes,
+)
+
+CLASSIC_CANDIDATES = all_candidates(Ruleset())
 
 
 def test_the_classic_game_has_3024_candidates():
@@ -78,7 +85,7 @@ def test_feedback_space_matches_brute_force(ruleset):
     assert set(feedback_space(ruleset)) == brute
 
 
-@given(rulesets())
+@given(rulesets(max_space=SPACE_HEAVY_MAX_SPACE))
 def test_every_space_contains_the_win_and_excludes_the_hole(ruleset):
     space = feedback_space(ruleset)
     assert Feedback(ruleset.length, 0) in space
@@ -102,14 +109,20 @@ def test_survivors_are_exactly_the_consistent_candidates(case):
         assert (candidate in survivors) == (score(candidate, guess) == feedback)
 
 
-def test_a_winning_guess_leaves_only_the_secret():
-    ruleset = Ruleset()
-    secret = ("4", "7", "1", "2")
-    survivors = filter_candidates(all_candidates(ruleset), secret, Feedback(4, 0))
-    assert survivors == [secret]
+@given(classic_codes(), classic_codes())
+def test_the_secret_survives_at_full_scale(secret, guess):
+    # Same property as above, on the 3024-code game the bounded ruleset
+    # strategy can never reach.
+    feedback = score(secret, guess)
+    assert secret in filter_candidates(CLASSIC_CANDIDATES, guess, feedback)
 
 
-@given(rulesets())
+@given(classic_codes())
+def test_a_winning_guess_leaves_only_the_secret(secret):
+    assert filter_candidates(CLASSIC_CANDIDATES, secret, Feedback(4, 0)) == [secret]
+
+
+@given(rulesets(max_space=SPACE_HEAVY_MAX_SPACE))
 def test_the_outcomes_partition_the_candidate_space(ruleset):
     # Every candidate lands in exactly one bucket, so the parts sum to the whole.
     candidates = all_candidates(ruleset)

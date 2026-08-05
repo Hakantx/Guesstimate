@@ -3,7 +3,7 @@ from hypothesis import given
 
 from guesstimate.core import Feedback, Ruleset, parse_code, score
 
-from .strategies import rulesets_with_code, rulesets_with_two_codes
+from .strategies import classic_codes, rulesets_with_code, rulesets_with_two_codes
 
 
 def _code(text: str) -> tuple[str, ...]:
@@ -89,3 +89,23 @@ def test_parsed_codes_score_the_same_as_raw_tuples():
     assert score(parse_code("1234", ruleset), parse_code("3264", ruleset)) == Feedback(
         2, 1
     )
+
+
+# The properties above run on small generated rulesets, which is where odd
+# alphabets and repeat handling break. None of them can ever draw the 3024-code
+# game the project is actually about, so the same invariants are re-checked here
+# at full scale with generated pairs.
+
+
+@given(classic_codes(), classic_codes())
+def test_classic_scores_obey_every_invariant(secret, guess):
+    feedback = score(secret, guess)
+    assert feedback.bulls + feedback.cows <= 4
+    assert feedback != Feedback(3, 1)
+    assert feedback == score(guess, secret)
+    assert feedback.is_win(4) == (secret == guess)
+
+
+@given(classic_codes())
+def test_classic_code_against_itself_is_four_bulls(code):
+    assert score(code, code) == Feedback(4, 0)

@@ -2,9 +2,14 @@ import dataclasses
 
 import pytest
 from hypothesis import given
-from hypothesis import strategies as st
 
-from guesstimate.core import Feedback, Ruleset, feedback_space
+from guesstimate.core import Feedback, score
+
+from .strategies import (
+    classic_codes,
+    feedbacks,
+    rulesets_with_reachable_feedback,
+)
 
 
 def test_renders_in_plus_minus_form():
@@ -58,6 +63,27 @@ def test_win_is_all_bulls():
     assert Feedback(3, 0).is_win(3) is True
 
 
-@given(st.sampled_from(feedback_space(Ruleset())))
-def test_parse_inverts_str_for_every_reachable_outcome(feedback):
+@given(feedbacks())
+def test_parse_inverts_str(feedback):
     assert Feedback.parse(str(feedback)) == feedback
+
+
+@given(rulesets_with_reachable_feedback())
+def test_parse_inverts_str_for_reachable_outcomes(case):
+    # The ruleset is generated too, so this is not an enumeration of one fixed
+    # feedback space -- it round-trips outcomes drawn from many different games.
+    _, feedback = case
+    assert Feedback.parse(str(feedback)) == feedback
+
+
+@given(classic_codes(), classic_codes())
+def test_parse_inverts_str_on_real_scores(case, guess):
+    # Round-trips feedback that came out of the scorer rather than a constructor.
+    assert Feedback.parse(str(score(case, guess))) == score(case, guess)
+
+
+@given(feedbacks(), feedbacks())
+def test_equality_is_by_value(first, second):
+    assert (first == second) == (
+        (first.bulls, first.cows) == (second.bulls, second.cows)
+    )
