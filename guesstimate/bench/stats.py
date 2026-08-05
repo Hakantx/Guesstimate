@@ -60,8 +60,24 @@ class PairedDifference:
         return low > 0 or high < 0
 
 
+def per_secret_guesses(records: Sequence[GameRecord]) -> list[float]:
+    """One number per secret, averaging any repeats.
+
+    For a deterministic solver this is just its guess count. For the random
+    baseline, played several times per secret, it is the mean over those plays
+    -- an estimate of expected performance on that secret rather than one draw
+    from it. That distinction is what makes the baseline pairable at all: a
+    single random game carries the solver's own coin flips, which correlate
+    with nothing, so differencing against it cancels no shared difficulty.
+    """
+    grouped: dict[int, list[int]] = {}
+    for record in records:
+        grouped.setdefault(record.secret_index, []).append(record.guesses)
+    return [statistics.mean(grouped[index]) for index in sorted(grouped)]
+
+
 def paired_difference(
-    baseline: Sequence[int], contender: Sequence[int]
+    baseline: Sequence[float], contender: Sequence[float]
 ) -> PairedDifference:
     """Difference the two runs secret by secret.
 
@@ -76,7 +92,7 @@ def paired_difference(
     if not baseline:
         raise ValueError("paired comparison needs at least one secret")
 
-    diffs = [b - c for b, c in zip(baseline, contender, strict=True)]
+    diffs = [float(b) - float(c) for b, c in zip(baseline, contender, strict=True)]
     stdev = statistics.stdev(diffs) if len(diffs) > 1 else 0.0
     return PairedDifference(
         mean=statistics.mean(diffs),
@@ -102,6 +118,8 @@ class Summary:
 
     config: str
     n: int
+    games: int
+    repeats: int
     mean: float
     median: float
     worst: int
@@ -124,14 +142,17 @@ class Summary:
 
 def summarise(result: RunResult) -> Summary:
     """Reduce one configuration's games to its published row."""
-    ordered = sorted(result.records, key=lambda r: r.secret_index)
+    ordered = sorted(result.records, key=lambda r: (r.secret_index, r.repeat))
     counts = [r.guesses for r in ordered]
     times = [r.seconds for r in ordered]
     turn_times = [t for r in ordered for t in r.turn_seconds]
 
+    per_secret = per_secret_guesses(ordered)
     return Summary(
         config=result.config.name,
-        n=len(ordered),
+        n=len(per_secret),
+        games=len(ordered),
+        repeats=len(ordered) // max(1, len(per_secret)),
         mean=statistics.mean(counts),
         median=statistics.median(counts),
         worst=max(counts),

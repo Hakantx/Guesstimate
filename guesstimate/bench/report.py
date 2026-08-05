@@ -16,10 +16,19 @@ def _seconds(value: float) -> str:
     return f"{value * 1000:.0f}ms"
 
 
-def guess_table(summaries: Sequence[Summary], ruleset: Ruleset, floor: float) -> str:
-    """Guess counts per configuration, best mean first."""
+def guess_table(
+    summaries: Sequence[Summary], ruleset: Ruleset, floor: float, exhaustive: bool
+) -> str:
+    """Guess counts per configuration, best mean first.
+
+    The worst-case column is named for what it actually is. A mean is estimable
+    from a sample; a maximum is not. Over 100 of 3024 secrets every solver
+    reported 7, which says the hardest secret *drawn* needed 7 -- not that no
+    secret needs 8. Only a full sweep licenses the word "worst".
+    """
+    worst_header = "Worst" if exhaustive else "Sample max"
     rows = [
-        "| Solver | Mean | Median | Worst | SD | vs floor |",
+        f"| Solver | Mean | Median | {worst_header} | SD | vs floor |",
         "|---|---|---|---|---|---|",
     ]
     for summary in sorted(summaries, key=lambda s: s.mean):
@@ -34,6 +43,16 @@ def guess_table(summaries: Sequence[Summary], ruleset: Ruleset, floor: float) ->
         f"less; the `vs floor` column is how far each one is from a bound that "
         f"assumes every guess splits the space perfectly evenly."
     )
+    if not exhaustive:
+        rows.append("")
+        rows.append(
+            f"**`Sample max` is a lower bound on the true worst case**, not the "
+            f"worst case. It is the hardest of the {summaries[0].n} secrets "
+            f"drawn, out of {ruleset.space_size}; the real maximum can only be "
+            f"higher. This matters most for minimax, whose entire justification "
+            f"is the worst case -- the one column a sample cannot produce. Run "
+            f'`make bench ARGS="--full"` for a figure that earns the name.'
+        )
     return "\n".join(rows)
 
 
@@ -61,7 +80,7 @@ def timing_table(summaries: Sequence[Summary]) -> str:
 
 
 def paired_table(
-    baseline: str, results: dict[str, list[int]], contenders: Sequence[str]
+    baseline: str, results: dict[str, list[float]], contenders: Sequence[str]
 ) -> str:
     """Paired differences against one baseline, secret by secret."""
     rows = [
@@ -109,9 +128,10 @@ def build_report(
     provenance: Provenance,
     ruleset: Ruleset,
     summaries: Sequence[Summary],
-    guess_counts: dict[str, list[int]],
+    guess_counts: dict[str, list[float]],
     floor: float,
     baseline: str,
+    exhaustive: bool = False,
 ) -> str:
     """Assemble the whole markdown document."""
     names = [s.config for s in summaries]
@@ -125,7 +145,7 @@ def build_report(
         "",
         "## Guess counts",
         "",
-        guess_table(summaries, ruleset, floor),
+        guess_table(summaries, ruleset, floor, exhaustive),
         "",
         "## Paired comparison",
         "",

@@ -30,6 +30,7 @@ from .stats import (
     Summary,
     information_floor,
     paired_difference,
+    per_secret_guesses,
     summarise,
 )
 
@@ -45,6 +46,7 @@ __all__ = [
     "information_floor",
     "measure_cold_open",
     "paired_difference",
+    "per_secret_guesses",
     "play_game",
     "run_config",
     "summarise",

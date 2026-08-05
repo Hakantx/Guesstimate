@@ -19,5 +19,7 @@ class RandomSolver(BaseSolver):
     flag is accepted anyway so that every strategy is built the same way.
     """
 
+    stochastic = True
+
     def _choose(self) -> Code:
         return self._rng.choice(self._candidates)

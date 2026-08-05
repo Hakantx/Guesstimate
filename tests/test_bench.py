@@ -14,6 +14,7 @@ from guesstimate.bench import (
     draw_sample,
     information_floor,
     paired_difference,
+    per_secret_guesses,
     run_config,
     summarise,
 )
@@ -137,7 +138,7 @@ def test_a_store_reloads_what_it_wrote(tmp_path):
     store.append(record)
 
     reopened = RecordStore(path, Provenance.capture(SMALL, sample_size=2, seed=1))
-    assert reopened.done("entropy/restricted") == {0}
+    assert reopened.done("entropy/restricted") == {(0, 0)}
     assert reopened.records()[0] == record
 
 
@@ -165,6 +166,75 @@ def test_resuming_skips_completed_games(tmp_path):
     run_config(config, SMALL, sample, seed=3, store=resumed)
     assert len(resumed.records()) == 4
     assert sorted(r.secret_index for r in resumed.records()) == [0, 1, 2, 3]
+
+
+# --- the multi-seed baseline ----------------------------------------------
+#
+# Requirement 2. A single random game is one draw from a distribution, and its
+# per-secret value correlates with nothing -- measured at -0.13 to -0.06
+# against the strategies on the classic ruleset, which is why pairing against
+# it recovered no variance at all. Averaging several seeds per secret turns
+# that draw into an estimate of expected performance on that secret, which is
+# the quantity a strategy should be compared against.
+
+
+def test_only_stochastic_solvers_are_repeated():
+    from guesstimate.solvers import EntropySolver, RandomSolver
+
+    assert RandomSolver.stochastic is True
+    assert EntropySolver.stochastic is False
+
+
+def test_the_baseline_is_played_once_per_seed():
+    sample = draw_sample(SMALL, size=5, seed=5)
+    result = run_config(Config("random", True), SMALL, sample, seed=5, repeats=4)
+    assert len(result.records) == 20
+    assert sorted({r.repeat for r in result.records}) == [0, 1, 2, 3]
+
+
+def test_repeating_a_deterministic_solver_is_refused():
+    # Playing minimax five times returns the same game five times; recording it
+    # would inflate the sample without adding a single bit of information.
+    sample = draw_sample(SMALL, size=5, seed=5)
+    result = run_config(Config("minimax", True), SMALL, sample, seed=5, repeats=4)
+    assert len(result.records) == 5
+    assert {r.repeat for r in result.records} == {0}
+
+
+def test_each_repeat_gets_its_own_seed():
+    sample = draw_sample(SMALL, size=8, seed=5)
+    result = run_config(Config("random", True), SMALL, sample, seed=5, repeats=6)
+    by_secret: dict[int, set[int]] = {}
+    for record in result.records:
+        by_secret.setdefault(record.secret_index, set()).add(record.guesses)
+    # Not proof of independence, but a repeat that reused one seed would give
+    # identical counts for every secret.
+    assert any(len(counts) > 1 for counts in by_secret.values())
+
+
+def test_per_secret_guesses_averages_the_repeats():
+    records = [
+        GameRecord("random/restricted", 0, "123", 4, 0.0, (0.0,), (1,), repeat=0),
+        GameRecord("random/restricted", 0, "123", 6, 0.0, (0.0,), (1,), repeat=1),
+        GameRecord("random/restricted", 1, "124", 3, 0.0, (0.0,), (1,), repeat=0),
+        GameRecord("random/restricted", 1, "124", 3, 0.0, (0.0,), (1,), repeat=1),
+    ]
+    assert per_secret_guesses(records) == [5.0, 3.0]
+
+
+def test_paired_difference_accepts_averaged_baselines():
+    paired = paired_difference([5.0, 3.5, 4.5], [4, 3, 5])
+    assert paired.mean == pytest.approx((1.0 + 0.5 - 0.5) / 3)
+
+
+def test_the_summary_reports_how_many_repeats_it_used():
+    sample = draw_sample(SMALL, size=6, seed=5)
+    summary = summarise(
+        run_config(Config("random", True), SMALL, sample, seed=5, repeats=5)
+    )
+    assert summary.n == 6  # secrets
+    assert summary.games == 30  # games played
+    assert summary.repeats == 5
 
 
 # --- running ---------------------------------------------------------------
@@ -308,7 +378,7 @@ def test_the_report_carries_its_provenance():
 
     results = _small_run()
     summaries = [summarise(r) for r in results.values()]
-    counts = {k: [g.guesses for g in r.records] for k, r in results.items()}
+    counts = {k: per_secret_guesses(r.records) for k, r in results.items()}
     provenance = Provenance.capture(SMALL, sample_size=12, seed=5)
 
     report = build_report(
@@ -343,7 +413,7 @@ def test_charts_are_written(tmp_path):
 
     results = _small_run()
     summaries = [summarise(r) for r in results.values()]
-    counts = {k: [g.guesses for g in r.records] for k, r in results.items()}
+    counts = {k: per_secret_guesses(r.records) for k, r in results.items()}
     written = write_charts(
         summaries, counts, "random/restricted", information_floor(SMALL), tmp_path
     )

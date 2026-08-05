@@ -16,6 +16,7 @@ from .records import GameRecord, RecordStore
 # it. Any odd constant does; this one is prime and large enough that adjacent
 # indices do not produce adjacent states.
 _INDEX_STRIDE = 1_000_003
+_REPEAT_STRIDE = 7_919
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,12 @@ def draw_sample(ruleset: Ruleset, size: int | None, seed: int) -> list[Code]:
 
 
 def play_game(
-    config: Config, ruleset: Ruleset, secret: Code, index: int, seed: int
+    config: Config,
+    ruleset: Ruleset,
+    secret: Code,
+    index: int,
+    seed: int,
+    repeat: int = 0,
 ) -> GameRecord:
     """Play one game and record what it cost.
 
@@ -73,7 +79,7 @@ def play_game(
     solver = SOLVERS[config.solver](
         ruleset,
         restrict_to_candidates=config.restrict_to_candidates,
-        rng=random.Random(seed * _INDEX_STRIDE + index),
+        rng=random.Random(seed * _INDEX_STRIDE + index * _REPEAT_STRIDE + repeat),
     )
 
     turn_seconds: list[float] = []
@@ -98,6 +104,7 @@ def play_game(
         seconds=time.perf_counter() - started,
         turn_seconds=tuple(turn_seconds),
         survivors=tuple(survivors),
+        repeat=repeat,
     )
 
 
@@ -128,18 +135,30 @@ def run_config(
     store: RecordStore | None = None,
     start_index: int = 0,
     progress: bool = False,
+    repeats: int = 1,
 ) -> RunResult:
     """Play every secret in the sample with one configuration.
 
     The cold open is measured and charged separately before the loop starts, so
     every game in `records` is a warm game and their mean describes the same
     kind of event.
+
+    `repeats` applies only to stochastic solvers. Playing a deterministic one
+    twice returns the same game, so repeating it would inflate the record count
+    without adding information; playing the random baseline once returns a
+    single draw from a distribution, which is not the quantity anyone wants to
+    compare a strategy against.
     """
     cold_open = measure_cold_open(config, ruleset)
+    per_secret = repeats if SOLVERS[config.solver].stochastic else 1
 
     already = store.done(config.name) if store else set()
     existing = (
-        {r.secret_index: r for r in store.records() if r.config == config.name}
+        {
+            (r.secret_index, r.repeat): r
+            for r in store.records()
+            if r.config == config.name
+        }
         if store
         else {}
     )
@@ -147,16 +166,17 @@ def run_config(
     records: list[GameRecord] = []
     for offset, secret in enumerate(sample):
         index = start_index + offset
-        if index in already:
-            records.append(existing[index])
-            continue
+        for repeat in range(per_secret):
+            if (index, repeat) in already:
+                records.append(existing[(index, repeat)])
+                continue
 
-        record = play_game(config, ruleset, secret, index, seed)
-        if store:
-            store.append(record)
-        records.append(record)
-        if progress and (offset + 1) % 10 == 0:
+            record = play_game(config, ruleset, secret, index, seed, repeat)
+            if store:
+                store.append(record)
+            records.append(record)
+        if progress and (offset + 1) % 25 == 0:
             print(f"  {config.name}: {offset + 1}/{len(sample)}", flush=True)
 
-    records.sort(key=lambda r: r.secret_index)
+    records.sort(key=lambda r: (r.secret_index, r.repeat))
     return RunResult(config=config, records=records, cold_open_seconds=cold_open)

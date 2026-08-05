@@ -10,7 +10,7 @@ from .stats import Summary, paired_difference
 
 def write_charts(
     summaries: Sequence[Summary],
-    guess_counts: dict[str, list[int]],
+    guess_counts: dict[str, list[float]],
     baseline: str,
     floor: float,
     directory: Path,

@@ -26,6 +26,10 @@ class GameRecord:
     seconds: float
     turn_seconds: tuple[float, ...]
     survivors: tuple[int, ...]
+    #: Which repeat of this secret. Deterministic solvers only ever have 0.
+    #: A stochastic baseline is played several times per secret so its score
+    #: is its expected performance there rather than a single draw.
+    repeat: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Render for a JSONL row."""
@@ -37,6 +41,7 @@ class GameRecord:
             "seconds": self.seconds,
             "turn_seconds": list(self.turn_seconds),
             "survivors": list(self.survivors),
+            "repeat": self.repeat,
         }
 
     @classmethod
@@ -50,6 +55,7 @@ class GameRecord:
             seconds=data["seconds"],
             turn_seconds=tuple(data["turn_seconds"]),
             survivors=tuple(data["survivors"]),
+            repeat=data.get("repeat", 0),
         )
 
 
@@ -104,6 +110,6 @@ class RecordStore:
         """Every game recorded so far, in the order it was written."""
         return list(self._records)
 
-    def done(self, config: str) -> set[int]:
-        """Sample indices already played for a config."""
-        return {r.secret_index for r in self._records if r.config == config}
+    def done(self, config: str) -> set[tuple[int, int]]:
+        """(secret index, repeat) pairs already played for a config."""
+        return {(r.secret_index, r.repeat) for r in self._records if r.config == config}

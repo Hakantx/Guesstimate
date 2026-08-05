@@ -15,7 +15,7 @@ from .harness import Config, draw_sample, run_config
 from .provenance import Provenance
 from .records import RecordStore
 from .report import build_report
-from .stats import information_floor, summarise
+from .stats import information_floor, per_secret_guesses, summarise
 
 DEFAULT_SAMPLE = 300
 DEFAULT_SEED = 20260805
@@ -56,6 +56,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--baseline", default="random/restricted")
+    parser.add_argument(
+        "--baseline-repeats",
+        type=int,
+        default=5,
+        help=(
+            "games per secret for stochastic solvers (default 5). One game is "
+            "a single draw whose per-secret value correlates with nothing, so "
+            "pairing against it recovers no variance; averaging several turns "
+            "it into an estimate of expected performance on that secret. "
+            "Deterministic solvers ignore this."
+        ),
+    )
     parser.add_argument("--out", type=Path, default=Path("docs/benchmarks"))
     parser.add_argument(
         "--no-charts", action="store_true", help="skip matplotlib output"
@@ -94,18 +106,24 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     summaries = []
-    guess_counts: dict[str, list[int]] = {}
+    guess_counts: dict[str, list[float]] = {}
     started = time.perf_counter()
     for config in configs:
         config_started = time.perf_counter()
         result = run_config(
-            config, ruleset, sample, args.seed, store=store, progress=True
+            config,
+            ruleset,
+            sample,
+            args.seed,
+            store=store,
+            progress=True,
+            repeats=args.baseline_repeats,
         )
         summary = summarise(result)
         summaries.append(summary)
-        guess_counts[config.name] = [r.guesses for r in result.records]
+        guess_counts[config.name] = per_secret_guesses(result.records)
         print(
-            f"{config.name}: mean {summary.mean:.3f}, worst {summary.worst}, "
+            f"{config.name}: mean {summary.mean:.3f}, sample max {summary.worst}, "
             f"cold open {summary.cold_open_seconds:.1f}s, "
             f"{time.perf_counter() - config_started:.0f}s total",
             flush=True,
@@ -113,7 +131,15 @@ def main(argv: list[str] | None = None) -> int:
 
     floor = information_floor(ruleset)
     baseline = args.baseline if args.baseline in guess_counts else configs[0].name
-    report = build_report(provenance, ruleset, summaries, guess_counts, floor, baseline)
+    report = build_report(
+        provenance,
+        ruleset,
+        summaries,
+        guess_counts,
+        floor,
+        baseline,
+        exhaustive=len(sample) == ruleset.space_size,
+    )
     (args.out / "README.md").write_text(report, encoding="utf-8")
     print(f"wrote {args.out / 'README.md'}")
 
