@@ -78,6 +78,16 @@ exclude = ["^legacy/"]
 module = "legacy.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+# Same call as the ruff per-file-ignores above: a `-> None` on every test and a
+# type on every Hypothesis-supplied argument is noise, and the engine's own
+# annotations are what strict mode is there to protect. Bodies are still fully
+# checked -- this drops the signature requirement, not the type checking.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
