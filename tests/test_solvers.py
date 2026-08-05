@@ -16,7 +16,9 @@ from guesstimate.solvers import (
     MinimaxSolver,
     RandomSolver,
     Solver,
+    clear_opening_cache,
 )
+from guesstimate.solvers.partition import _OPENING_CACHE
 
 SOLVER_CLASSES = [RandomSolver, MinimaxSolver, ExpectedSizeSolver, EntropySolver]
 SOLVER_IDS = ["random", "minimax", "expected-size", "entropy"]
@@ -182,6 +184,79 @@ def test_entropy_cost_is_negated_so_that_lower_means_more_information():
     assert cost([2, 2]) == pytest.approx(-1.0)  # 1 bit
     assert cost([4]) == pytest.approx(0.0)  # learns nothing
     assert cost([2, 2]) < cost([3, 1]) < cost([4])
+
+
+# --- the opening cache -----------------------------------------------------
+#
+# Turn one is ~90% of a game's cost and its answer is identical every game, so
+# it is computed once per (strategy, ruleset, restriction). The risk is not
+# speed but silence: a cache keyed too loosely returns another ruleset's
+# opening, and every test that only checks "the solver eventually wins" would
+# still pass.
+
+
+@pytest.fixture(autouse=True)
+def _isolate_opening_cache():
+    clear_opening_cache()
+    yield
+    clear_opening_cache()
+
+
+@pytest.mark.parametrize(
+    "solver_class", [MinimaxSolver, ExpectedSizeSolver, EntropySolver]
+)
+def test_the_cached_opening_is_what_the_search_would_have_returned(solver_class):
+    uncached = solver_class(SMALL)._search()
+    clear_opening_cache()
+    assert solver_class(SMALL).guess() == uncached
+    assert solver_class(SMALL).guess() == uncached  # now served from the cache
+
+
+@pytest.mark.parametrize(
+    "solver_class", [MinimaxSolver, ExpectedSizeSolver, EntropySolver]
+)
+def test_the_opening_is_cached_after_the_first_game(solver_class):
+    assert not _OPENING_CACHE
+    solver_class(SMALL).guess()
+    assert list(_OPENING_CACHE) == [(solver_class, SMALL, True)]
+
+
+def test_rulesets_and_restrictions_get_their_own_entries():
+    other = Ruleset(3, "12345", allow_repeats=True)
+    MinimaxSolver(SMALL).guess()
+    MinimaxSolver(SMALL, restrict_to_candidates=False).guess()
+    MinimaxSolver(other).guess()
+    EntropySolver(SMALL).guess()
+    assert set(_OPENING_CACHE) == {
+        (MinimaxSolver, SMALL, True),
+        (MinimaxSolver, SMALL, False),
+        (MinimaxSolver, other, True),
+        (EntropySolver, SMALL, True),
+    }
+
+
+def test_a_cached_opening_never_answers_for_a_later_turn():
+    # Only turn one is fixed across games; reusing it afterwards would make the
+    # solver replay its opening forever.
+    solver = MinimaxSolver(SMALL)
+    opening = solver.guess()
+    solver.update(opening, Feedback(1, 0))
+    assert solver.guess() != opening
+
+
+def test_random_openings_still_vary_with_the_seed():
+    # RandomSolver is not a PartitionSolver, so it is excluded by construction.
+    # If the cache ever migrates up to BaseSolver, this is what catches it.
+    openings = {RandomSolver(SMALL, rng=random.Random(s)).guess() for s in range(20)}
+    assert len(openings) > 1
+    assert not _OPENING_CACHE
+
+
+def test_clearing_the_cache_empties_it():
+    MinimaxSolver(SMALL).guess()
+    assert _OPENING_CACHE
+    clear_opening_cache()
+    assert not _OPENING_CACHE
 
 
 # The sweep below plays every secret in a 120-code ruleset with every solver.

@@ -59,6 +59,10 @@ class BaseSolver(ABC):
         self._position = {code: index for index, code in enumerate(self._space)}
         self._candidates = list(self._space)
         self._survivor_set = set(self._candidates)
+        # How many answers this solver has absorbed. Zero means it is still on
+        # its opening move, which is the one turn whose result can be reused
+        # across games -- see the opening cache in `partition.py`.
+        self._answers = 0
 
     @property
     def candidates(self) -> Sequence[Code]:
@@ -93,6 +97,7 @@ class BaseSolver(ABC):
             )
         self._candidates = survivors
         self._survivor_set = set(survivors)
+        self._answers += 1
 
     def _partition(self, guess: Code) -> list[int]:
         """Sizes of the groups this guess would split the survivors into.

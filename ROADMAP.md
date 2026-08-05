@@ -94,7 +94,7 @@ guess ceiling across a sampled sweep of secrets.
 
 ## Phase 3 — Benchmark suite
 
-`guesstimate/bench/` runs every solver against all 3024 secrets and reports:
+`guesstimate/bench/` runs every solver over a set of secrets and reports:
 
 - mean, median, worst case, and standard deviation of guess count
 - the full distribution as a histogram
@@ -104,10 +104,37 @@ guess ceiling across a sampled sweep of secrets.
 Emit a markdown table plus matplotlib charts into `docs/benchmarks/`. Wire it
 to `make bench`. Seed every random source so runs reproduce.
 
+### Sample size
+
+**The naive solvers benchmark a seeded random sample of 300 secrets, not all
+3024.**
+
+Phase 2 measured a scoring solver at roughly 51 seconds per game on the
+reference machine, of which turn one was 99.5% — the opening scores all 3024
+guesses against all 3024 candidates, and every turn after that works on a few
+hundred survivors. Since the opening is identical in every game, Phase 2 caches
+it per `(strategy, ruleset, restriction)`. That took a game from ~51s to a mean
+of ~1.6s after the first, roughly 33x, and it is bookkeeping rather than the
+Phase 5 matrix work.
+
+Even so, sampling is what makes this a benchmark instead of an afternoon. Post
+cache, a full 3024 sweep is about 80 minutes per solver, so roughly four hours
+for the three scoring strategies, every time a number changes. At 300 it is
+about nine minutes each. The standard error on mean guess count at n=300 is
+well under a tenth of a turn, far finer than the gaps between strategies, so
+nothing worth seeing is lost.
+
+Full 3024-secret sweeps happen after Phase 5, when the feedback matrix makes
+them cheap. `RandomSolver` is fast enough to sweep in full at any time.
+
+Every published table states its sample size, its seed, and the machine. A mean
+guess count with no n beside it is not a result, and a table that mixes a
+300-sample solver with a 3024-sample one without saying so is worse than no
+table at all.
+
 Reference hardware is a 2017 dual-core Intel i7. Every published number comes
-from that machine, and it is slow enough that a full naive-minimax sweep over
-3024 secrets is an overnight job, not a coffee break — so the harness needs
-resumable runs and a `--sample N` flag from the start. Two cores also means
+from that machine. The harness still needs resumable runs and a `--sample N`
+flag from the start — 300 is the default, not a ceiling. Two cores also means
 process-level parallelism buys about 2x and no more; do not design around a
 core count that does not exist. Record the machine alongside the numbers.
 

@@ -14,7 +14,7 @@ from .base import BaseSolver
 from .entropy import EntropySolver
 from .expected_size import ExpectedSizeSolver
 from .minimax import MinimaxSolver
-from .partition import PartitionSolver
+from .partition import PartitionSolver, clear_opening_cache
 from .protocol import InconsistentFeedbackError, Solver
 from .random_solver import RandomSolver
 
@@ -40,4 +40,5 @@ __all__ = [
     "PartitionSolver",
     "RandomSolver",
     "Solver",
+    "clear_opening_cache",
 ]
