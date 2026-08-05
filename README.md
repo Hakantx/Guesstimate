@@ -60,25 +60,72 @@ Individual targets: `make lint`, `make fmt`, `make types`, `make test`,
 
 ## Benchmarks
 
+**Strategy is very nearly irrelevant on the classic game, and starts to matter
+when each guess tells you less.**
+
+On the standard 4-digit, 1-9, no-repeats ruleset, four solvers that range from
+"pick any candidate at random" to a full minimax search land within a quarter of
+a guess of each other, and not one of them separates from the random baseline at
+95% confidence:
+
+| Solver | Mean | Sample max | vs random | 95% CI | Significant |
+|---|---|---|---|---|---|
+| minimax | 4.870 | 7 | +0.250 | [-0.040, +0.540] | no |
+| expected-size | 4.920 | 7 | +0.200 | [-0.081, +0.481] | no |
+| entropy | 4.970 | 7 | +0.150 | [-0.112, +0.412] | no |
+| random | 5.120 | 7 | — | — | — |
+
+<sub>100 paired secrets of 3024, seed 20260805. Information floor 3.037.</sub>
+
+Move to a ruleset where a guess carries less information — 5 positions over 4
+symbols with repeats, so 1024 codes but a similar number of feedback outcomes —
+and the same four solvers pull apart cleanly, all three strategies clearing the
+bar:
+
+| Solver | Mean | Sample max | vs random | 95% CI | Significant |
+|---|---|---|---|---|---|
+| entropy | 3.893 | 5 | **+0.258** | [+0.173, +0.343] | **yes** |
+| expected-size | 3.930 | 5 | **+0.221** | [+0.144, +0.298] | **yes** |
+| minimax | 4.030 | 6 | **+0.121** | [+0.034, +0.208] | **yes** |
+| random | 4.151 | 7 | — | — | — |
+
+<sub>300 paired secrets of 1024, seed 20260805. Information floor 2.310.</sub>
+
+The reason is that 3024 candidates against 14 possible answers collapse fast
+enough that almost any consistent guess is nearly as good as the best one. The
+classic game does not have room for cleverness. That is a more interesting
+result than a table of four nearly identical numbers, and it is why the
+benchmark reports a second ruleset at all.
+
+`Sample max` is the hardest secret *drawn*, not the true worst case — a mean is
+estimable from a sample and a maximum is not, which matters most for minimax,
+whose whole justification is the worst case. Run with `--full` for a figure that
+earns the name.
+
+### Running it
+
 ```sh
 make bench                          # 300 secrets, every solver
 make bench ARGS="--sample 50"       # quicker
-make bench ARGS="--unrestricted"    # both guessing modes, ~4.6x slower
+make bench ARGS="--unrestricted"    # both guessing modes, ~5x slower
+make bench ARGS="--full"            # every secret; ~108 min per solver
+make bench ARGS="--report-only"     # re-render tables from an existing run
 ```
 
-Results land in [`docs/benchmarks/`](docs/benchmarks/) — a markdown report plus
-charts, regenerated from scratch every run. Three things the harness insists on:
+Full reports and charts land in [`docs/benchmarks/`](docs/benchmarks/). Three
+things the harness insists on:
 
 - **Paired sampling.** Every solver plays the same seeded secrets in the same
   order, and comparisons are per-secret differences rather than differences of
-  means. Guess counts vary by whole turns between secrets while the gap between
-  good strategies is under a tenth of a turn, so unpaired means cannot see it.
-- **Split timings.** The opening move costs tens of seconds and every game after
-  it about two, so the two are reported separately rather than averaged into a
-  per-game figure that describes neither.
+  means. Between two strategies that removes most of the variance; against the
+  random baseline it removes almost none, for reasons worth reading in
+  [`docs/notes/paired-sampling.md`](docs/notes/paired-sampling.md).
+- **Split timings.** The opening move costs ~50s on the classic ruleset and
+  every game after it ~2s, so the two are reported separately rather than
+  averaged into a per-game figure that describes neither.
 - **Provenance.** Every report carries the commit, machine, Python version,
   ruleset, sample size, and seed that produced it. Runs are resumable and refuse
-  to continue into a file written by a different run.
+  to append to a file written by a different run.
 
 ## License
 

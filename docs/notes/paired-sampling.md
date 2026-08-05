@@ -38,11 +38,35 @@ Two practical consequences. First, solver-versus-solver comparisons in this
 repo are trustworthy at far smaller samples than solver-versus-baseline ones,
 and the tables should not imply otherwise — a footnote claiming "paired
 sampling, so these are tight" is true of one half of the table and false of the
-other. Second, the fix for the baseline is to stop treating a single random
-game as its score for a secret: run the baseline over several seeds per secret
-and average, which shrinks its per-secret noise and restores something for the
-pairing to cancel. That is a change to the harness rather than to the analysis,
-and it is not yet made.
+other. Second, a single random game is a poor score for a secret: it is one
+draw from a distribution, so the baseline can be improved by playing it several
+times per secret and averaging.
+
+## The fix works, and not for the reason predicted
+
+That change was made — the harness now plays stochastic solvers five times per
+secret by default and pairs on the mean. The prediction attached to it was that
+averaging would denoise the baseline enough for the underlying correlation to
+show through, restoring something for the pairing to cancel.
+
+That prediction was wrong. Measured over 300 secrets on a 1024-code ruleset,
+averaging five seeds cut the paired spread from 0.94 to 0.75 — a real
+improvement, worth roughly a third of the sample size — but the correlation
+between the baseline and the strategies barely moved, sitting between +0.02 and
++0.15. There was no hidden correlation waiting to be uncovered.
+
+What actually happened is simpler. The variance of a difference is the sum of
+the two variances less twice their covariance. With the covariance near zero,
+the only term available to shrink is the baseline's own variance, and averaging
+`k` independent games divides it by `k`. The improvement is arithmetic on one
+side of the subtraction rather than anything to do with pairing.
+
+Which makes the original finding stronger, not weaker. The secrets that are
+hard for a strategy really are not the secrets that are hard for the random
+baseline, and that survives denoising the baseline until its own noise is a
+fifth of what it was. Guessing at random among consistent candidates is not a
+worse version of playing well; it is a different thing, whose difficulty is
+driven by the draw rather than by the code being hunted.
 
 The measured effects against the baseline at n=100 were +0.25 guesses for
 minimax, +0.20 for expected-size, and +0.15 for entropy, none of them clearing
