@@ -31,7 +31,7 @@ never modified.
 | Phase | | |
 |---|---|---|
 | 0 | Preserve and scaffold | done |
-| 1 | The engine | |
+| 1 | The engine | done |
 | 2 | Solvers | |
 | 3 | Benchmark suite | |
 | 4 | CLI | |
