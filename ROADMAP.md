@@ -292,6 +292,13 @@ ten seconds.
 ## What to skip
 
 User accounts, a database, real-time multiplayer, server-persisted
-leaderboards, native mobile apps. Each adds infrastructure and none makes the
-project more impressive. Daily challenge plus LocalStorage stats gets ~90% of
-the engagement for none of the operational cost.
+leaderboards. Each adds infrastructure and none makes the project more
+impressive. Daily challenge plus LocalStorage stats gets ~90% of the engagement
+for none of the operational cost.
+
+Mobile apps are **deferred, not skipped**. `MOBILE.md` specs a PWA foundation
+and the two store builds as phases that start after Phase 9, and deliberately
+does not number them here — nothing about them gets built until the web game is
+finished. Two of its constraints do bind from Phase 1 onward, and they are
+rules 9 and 10 in `CLAUDE.md`: keep the engine portable, and never let
+server-authoritative state become the only way to play.
