@@ -113,16 +113,23 @@ Phase 2 measured a scoring solver at roughly 51 seconds per game on the
 reference machine, of which turn one was 99.5% — the opening scores all 3024
 guesses against all 3024 candidates, and every turn after that works on a few
 hundred survivors. Since the opening is identical in every game, Phase 2 caches
-it per `(strategy, ruleset, restriction)`. That took a game from ~51s to a mean
-of ~1.6s after the first, roughly 33x, and it is bookkeeping rather than the
-Phase 5 matrix work.
+it per `(strategy, ruleset, restriction)`. That is bookkeeping, not the Phase 5
+matrix work, and it does not spoil that measurement.
 
-Even so, sampling is what makes this a benchmark instead of an afternoon. Post
-cache, a full 3024 sweep is about 80 minutes per solver, so roughly four hours
-for the three scoring strategies, every time a number changes. At 300 it is
-about nine minutes each. The standard error on mean guess count at n=300 is
-well under a tenth of a turn, far finer than the gaps between strategies, so
-nothing worth seeing is lost.
+Measured over 30 warm games per solver: the first game still costs ~51s, and
+every game after it averages **2.13s** (sd 1.62, median 1.38, range 0.02–4.23).
+The spread is wide and right-skewed because turn two's cost depends on how many
+candidates survived turn one, which varies by secret — so the mean is what the
+projections below use, not the median.
+
+| Sweep | Per solver | Three scoring solvers |
+|---|---|---|
+| 300 secrets | ~11.5 min | ~35 min |
+| 3024 secrets | ~108 min | ~5.4 hours |
+
+Sampling is what keeps this a benchmark rather than an afternoon. The standard
+error on mean guess count at n=300 is well under a tenth of a turn, far finer
+than the gaps between strategies, so nothing worth seeing is lost.
 
 Full 3024-secret sweeps happen after Phase 5, when the feedback matrix makes
 them cheap. `RandomSolver` is fast enough to sweep in full at any time.

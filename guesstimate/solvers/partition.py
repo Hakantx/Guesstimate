@@ -28,6 +28,8 @@ from .base import BaseSolver
 # Expected-size and entropy are within a second of that. The opening is not
 # most of the cost, it is essentially all of it, so without this a benchmark
 # over 3024 secrets would spend two days recomputing one answer it already had.
+# With it, measured over 30 warm games, a game costs 2.13s on average (sd 1.62)
+# and a 3024-secret sweep drops from ~43 hours to ~108 minutes.
 #
 # Three things this is not. It is not I/O, so it does not touch CLAUDE.md rule
 # 1: nothing is read or written, and the cache is pure memoisation -- same

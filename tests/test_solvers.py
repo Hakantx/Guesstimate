@@ -259,16 +259,26 @@ def test_clearing_the_cache_empties_it():
     assert not _OPENING_CACHE
 
 
-# The sweep below plays every secret in a 120-code ruleset with every solver.
+# The sweep below plays every secret in a 360-code ruleset with every solver.
 # It is the "guess ceiling across a sampled sweep" Phase 2 calls for, and it is
 # also where the end-to-end sign check lives, so the games are played once and
 # shared.
 #
-# 120 codes rather than 60 is deliberate and measured. At 60, random-from-
-# survivors is so nearly optimal that entropy's mean (3.283) exactly ties
-# random's best seed, and the comparison is a coin flip. At 120 the ordering is
-# stable: entropy 3.883, random 3.908-3.983 across eight seeds.
-SWEEP = Ruleset(4, "12345")
+# The size is measured, not guessed. What matters is whether entropy's lead over
+# the random baseline is bigger than the baseline's own wobble across seeds,
+# because a lead smaller than that is a coin flip dressed as a result:
+#
+#     codes   entropy   random (8 seeds)   lead    seed spread   cost
+#       60      3.283     3.283-3.317      0.000     0.034        0.2s
+#      120      3.883     3.908-3.983      0.025     0.075        0.9s
+#      360      4.039     4.119-4.136      0.081     0.017       11.5s
+#      840      4.381     4.469-4.498      0.088     0.029      136.8s
+#
+# At 60 the lead is nothing at all -- random's best seed ties entropy exactly.
+# At 120 the lead is a third of the spread. At 360 it is nearly five times the
+# spread, which is a real separation, and 840 buys almost nothing more for
+# twelve times the runtime.
+SWEEP = Ruleset(4, "123456")
 
 
 @pytest.fixture(scope="module")
@@ -293,9 +303,9 @@ def test_entropy_beats_random_on_mean_guesses(sweep_results):
     # The end-to-end half of the sign check. It is a weaker guard than the
     # exact test above and deliberately kept anyway: a flipped sign still
     # produces a legal, terminating solver, so the only visible symptom is that
-    # it plays worse. Measured means over all 120 secrets -- entropy 3.883,
-    # sign-flipped 4.033, random 3.944 averaged over eight seeds -- so the flip
-    # lands the wrong side of random and this fails.
+    # it plays worse. Over all 360 secrets entropy averages 4.039 against a
+    # baseline of 4.119-4.136, a lead of ~0.08 on a spread of 0.017, so a flip
+    # that costs entropy anything at all lands it the wrong side of random.
     entropy = statistics.mean(sweep_results["entropy"])
     baselines = [
         statistics.mean(
@@ -309,10 +319,12 @@ def test_entropy_beats_random_on_mean_guesses(sweep_results):
 
 @pytest.mark.slow
 def test_expected_size_beats_random_on_mean_guesses(sweep_results):
-    # Minimax is deliberately absent. It optimises the worst case, not the
-    # mean, and measured over these 120 secrets its mean (3.933) is no better
-    # than random's best seed (3.908). That is the strategy working as
-    # designed, not a defect, so asserting otherwise would be wrong.
+    # Minimax is deliberately absent, even though on this particular ruleset it
+    # would pass (4.083 against a 4.119-4.136 baseline). It does not optimise
+    # the mean and is not reliably better on it: at 120 codes its mean of 3.933
+    # loses to random's best seed of 3.908. Asserting a comparison that happens
+    # to hold here would encode a claim about minimax that is not true in
+    # general. See docs/notes/minimax-mean-vs-worst.md.
     expected_size = statistics.mean(sweep_results["expected-size"])
     baseline = statistics.mean(
         play(RandomSolver(SWEEP, rng=random.Random(seed)), secret)

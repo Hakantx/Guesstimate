@@ -12,16 +12,25 @@ guesses. The random baseline averaged between 3.908 and 3.983 depending on its
 seed. So on a good seed, random beats the strategy that thinks. That looks like
 a bug and is not one — it is minimax doing exactly what it was asked.
 
+Widen the ruleset to 360 codes and the ordering flips back: minimax averages
+4.083 against a baseline of 4.119 to 4.136, and now it wins. That reversal is
+the actual finding. Minimax is not *reliably* worse than random on the mean;
+it is *indifferent* to the mean, so where it lands relative to a naive baseline
+is a property of the ruleset rather than of the strategy. A single measurement
+in either direction would have been easy to over-read.
+
 The reason is in what minimax optimises. It assumes the answer will be the
 least helpful one available, and plays to make that worst case as good as
 possible. It never asks how likely the worst case is. A guess that usually
 splits the possibilities beautifully but occasionally leaves a big awkward
 group will lose to a guess that always leaves a medium group, because minimax
 compares only those two largest groups. Averaged over many games, "always
-medium" is worse than "usually excellent, rarely bad" — but minimax has no way
-to express that, because averages are not what it is looking at. The strategies
-that do look at averages, expected-size and entropy, came in at 3.883, ahead of
-random on every seed.
+medium" can easily be worse than "usually excellent, rarely bad" — but minimax
+has no way to express that, because averages are not what it is looking at.
+Whether that costs it anything depends on how often the trade comes up in a
+given ruleset, which is why the answer moved between 120 and 360 codes. The
+strategies that do optimise the average, expected-size and entropy, beat random
+on every seed at both sizes.
 
 What minimax buys instead is a guarantee. Its worst case is bounded in a way
 nothing else here is: on a 60-code ruleset it never needed more than 4 guesses,
