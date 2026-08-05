@@ -9,7 +9,12 @@ stays small, dependency-free, and free of constructs that have no equivalent
 there. See CLAUDE.md rules 1 and 9.
 """
 
-from .candidates import all_candidates, feedback_space, filter_candidates
+from .candidates import (
+    all_candidates,
+    feedback_space,
+    filter_candidates,
+    relabelling_representatives,
+)
 from .code import Code, format_code, parse_code
 from .feedback import Feedback
 from .ruleset import Ruleset
@@ -24,5 +29,6 @@ __all__ = [
     "filter_candidates",
     "format_code",
     "parse_code",
+    "relabelling_representatives",
     "score",
 ]

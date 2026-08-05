@@ -91,3 +91,8 @@ check_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
+markers = [
+    # Run by default -- these are correctness tests and CI must not skip them.
+    # The marker exists so a tight local edit loop can use `make test-fast`.
+    "slow: brute-forces a mid-size candidate space; about a second each",
+]

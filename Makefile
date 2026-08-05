@@ -1,4 +1,4 @@
-.PHONY: help install lint fmt types test cov check clean
+.PHONY: help install lint fmt types test test-fast cov check clean
 
 help:
 	@echo "install  install dependencies into .venv"
@@ -6,6 +6,7 @@ help:
 	@echo "fmt      ruff format + fix"
 	@echo "types    mypy strict"
 	@echo "test     pytest"
+	@echo "test-fast pytest, skipping the slow brute-force checks"
 	@echo "cov      pytest with coverage report"
 	@echo "check    lint + types + test, what CI runs"
 	@echo "clean    remove caches and build artifacts"
@@ -26,6 +27,9 @@ types:
 
 test:
 	uv run pytest
+
+test-fast:
+	uv run pytest -m "not slow"
 
 cov:
 	uv run pytest --cov=guesstimate --cov-report=term-missing --cov-report=xml

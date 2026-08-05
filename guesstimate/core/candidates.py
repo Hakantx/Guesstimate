@@ -69,29 +69,46 @@ def feedback_space(ruleset: Ruleset) -> list[Feedback]:
     # alphabet -- with two symbols and repeats on, most of it is unreachable --
     # so this function measures rather than assumes, using the shortcut below.
     #
-    # Relabelling symmetry
-    # --------------------
-    # Renaming symbols cannot change a score, because scoring only ever asks
-    # whether two symbols are equal, never which symbol they are. So for any
-    # permutation p of the alphabet, score(p(secret), p(guess)) == score(secret,
-    # guess), and therefore score(p(secret), guess) == score(secret, p'(guess))
-    # where p' is the inverse. As guess runs over the whole space, so does
-    # p'(guess) -- meaning a secret and any relabelling of it reach the same set
-    # of outcomes.
-    #
-    # One secret per relabelling class is therefore enough. The canonical member
-    # of a class is the one whose symbols first appear in alphabet order: 1123
-    # is canonical, 2231 is the same pattern wearing different names. With
-    # repeats off there is exactly one such code, so the classic game costs a
-    # single pass over the candidates instead of 3024 x 3024.
+    # Which secrets need scoring is the whole cost of this function, and
+    # `relabelling_representatives` answers it -- see there for why one secret
+    # per class is enough.
     candidates = all_candidates(ruleset)
     outcomes = set()
-    for secret in candidates:
-        if not _is_canonical(secret, ruleset.alphabet):
-            continue
+    for secret in relabelling_representatives(ruleset):
         for guess in candidates:
             outcomes.add(score(secret, guess))
     return sorted(outcomes, key=lambda feedback: (feedback.bulls, feedback.cows))
+
+
+def relabelling_representatives(ruleset: Ruleset) -> list[Code]:
+    """One secret per relabelling class, in candidate order.
+
+    Renaming symbols cannot change a score, because scoring only ever asks
+    whether two symbols are equal, never which symbol they are. So for any
+    permutation p of the alphabet, `score(p(secret), p(guess))` equals
+    `score(secret, guess)`, and therefore `score(p(secret), guess)` equals
+    `score(secret, p'(guess))` where p' is the inverse. As `guess` runs over the
+    whole space, so does `p'(guess)` -- so a secret and any relabelling of it
+    reach exactly the same set of outcomes, and scoring one member of a class
+    stands in for scoring all of them.
+
+    A code represents its class when each symbol's first appearance is the
+    earliest alphabet symbol not yet used. So 1123 is a representative and 2231
+    is not, being the same "one symbol twice, then two new ones" pattern wearing
+    different names.
+
+    How much this saves depends entirely on repeats. With them off, every code
+    is the same pattern -- all symbols distinct -- so there is exactly one
+    representative and the classic game scores 3024 pairs instead of 3024 x 3024.
+    With them on, the count is the number of ways to partition the positions into
+    at most `len(alphabet)` groups: 15 for length 4, 41 for length 5 over three
+    symbols. Still a large saving, but no longer a constant one.
+    """
+    return [
+        code
+        for code in all_candidates(ruleset)
+        if _is_canonical(code, ruleset.alphabet)
+    ]
 
 
 def _is_canonical(code: Code, alphabet: str) -> bool:
