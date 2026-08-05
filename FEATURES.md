@@ -32,8 +32,10 @@ Your original game — the computer guesses, you give feedback — turned into t
 thing people screenshot.
 
 All 3024 candidates are rendered as a dense grid of small tiles, laid out like
-a punch card: 9 columns for the leading digit, ordered rows within. Every tile
-is one possible secret.
+a punch card: 63 columns by 48 rows, ordered by each candidate's index in the
+sorted permutation list. Every tile is one possible secret. Leading digits fall
+into contiguous horizontal bands as a consequence of the sort order, not as a
+layout rule — see `DESIGN.md`.
 
 Each turn:
 
@@ -176,8 +178,10 @@ animation at all.
 If Phase 1 was built generically, all of this is a settings panel:
 
 - Length 3 through 8
-- Zeros allowed or not
 - Repeated digits allowed or not
+- Zeros: not a setting of its own. `Ruleset.alphabet` is the single source of
+  truth for which symbols exist, so the UI's zeros toggle swaps the alphabet
+  between `123456789` and `0123456789` and nothing else changes
 - **Hex mode**: alphabet `0-9A-F`. Length 4 hex with repeats is 65,536
   candidates — enough to make the solver visibly work for it and enough to
   break naive minimax, which is a good demonstration of why Phase 5 matters.

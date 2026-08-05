@@ -36,7 +36,9 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
    the UI, or any other solver.
 
 3. **The engine is generic from day one.** Length, digit alphabet, repeats
-   allowed, zeros allowed — all parameters, never hardcoded. Half the features
+   allowed — all parameters, never hardcoded. `Ruleset.alphabet` is the single
+   source of truth for which symbols exist; there is no separate zeros flag,
+   because zeros exist exactly when `"0"` is in the alphabet. Half the features
    in FEATURES.md are free if this is done right in Phase 1 and expensive
    retrofits if it isn't.
 
@@ -77,6 +79,7 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
 guesstimate/
   core/          alphabet, candidates, scoring, feedback types. zero I/O.
   solvers/       one file per strategy + the shared protocol
+  data/          feedback matrix + opening book: build, cache, load. does I/O.
   bench/         benchmark harness, result tables, chart generation
   eval/          LLM-as-player harness
   api/           FastAPI routes, thin wrappers over core + solvers
@@ -107,6 +110,17 @@ tests/
   feedback matrix once as a uint8 numpy array (~9 MB) and index into it. Do
   this in Phase 5, not before — the naive version has to exist so the speedup
   can be measured honestly.
+
+- **The matrix lives in `guesstimate/data/`, not in the solvers.** Rule 1's
+  no-I/O ban covers `core/` and `solvers/` only; `data/` is the layer allowed
+  to touch the filesystem. It builds the matrix lazily on first use, caches it
+  to `data/feedback_matrix_<ruleset_hash>.npy` (gitignored, rebuilt by
+  `make matrix`), and hands it back. Solvers receive the matrix as a
+  constructor argument and never load it themselves — that keeps them pure,
+  testable against a hand-built stub, and honest about their dependencies.
+  Never build the matrix at import time: a 3024x3024 scoring pass on `import`
+  makes the CLI, the test suite, and CI pay for something most of them never
+  use.
 
 - **Restricted vs unrestricted guessing.** Minimax and entropy can be limited
   to surviving candidates, or allowed to guess anything in the full space.

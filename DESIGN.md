@@ -54,6 +54,12 @@ page.
 The candidate grid. 3024 cells, 63 columns by 48 rows, each cell 6px with a 1px
 gutter — roughly 440px square, which fits a phone at reduced scale.
 
+Cells are ordered by the candidate's index in the sorted permutation list,
+filling left-to-right then top-to-bottom. Nothing is grouped by hand. Because
+the list is sorted, each leading digit occupies one contiguous run of 336
+candidates — 5⅓ rows at 63 columns — so leading digits still read as visible
+horizontal bands without the layout having to encode them.
+
 - Alive: filled `--teal`, at 90% opacity
 - Just eliminated: flashes `--oxblood` for 140ms, then drops to a 1px `--rule`
   outline with a transparent center. Punched out, not deleted. The card keeps
