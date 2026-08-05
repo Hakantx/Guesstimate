@@ -3,7 +3,6 @@
 import random
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Sequence
 
 from guesstimate.core import (
     Code,
@@ -32,10 +31,11 @@ class BaseSolver(ABC):
         ruleset: The game being played.
         restrict_to_candidates: When True, only guess codes that could still be
             the secret. When False, guess anything in the full space, including
-            codes already ruled out. Unrestricted is stronger: a guess that
-            cannot possibly win can still split the survivors better than any
-            that can, and the extra turn it costs is often repaid. It is also
-            far slower, since the pool stays at full size every turn.
+            codes already ruled out. The argument for unrestricted is that a
+            guess which cannot win may still split the survivors better than
+            any that can. That is expectation, not measurement -- Phase 3
+            benchmarks both and settles it. What is certain is that
+            unrestricted is far slower, since the pool never shrinks.
         rng: Source of randomness, injected so benchmarks reproduce. Only
             `RandomSolver` uses it; the other three break ties deterministically
             and ignore it, but they accept it to keep the signature uniform.
@@ -51,13 +51,13 @@ class BaseSolver(ABC):
         self.ruleset = ruleset
         self.restrict_to_candidates = restrict_to_candidates
         self._rng = random.Random() if rng is None else rng
-        self._space = all_candidates(ruleset)
+        self._space = tuple(all_candidates(ruleset))
         # Position in the full space, used to break ties. This is what "lowest
         # first" means: alphabet order, not the tuples' own comparison order,
         # which would sort by character code and diverge the moment a ruleset
         # uses an alphabet that is not already in ascending order.
         self._position = {code: index for index, code in enumerate(self._space)}
-        self._candidates = list(self._space)
+        self._candidates = self._space
         self._survivor_set = set(self._candidates)
         # How many answers this solver has absorbed. Zero means it is still on
         # its opening move, which is the one turn whose result can be reused
@@ -65,16 +65,18 @@ class BaseSolver(ABC):
         self._answers = 0
 
     @property
-    def candidates(self) -> Sequence[Code]:
+    def candidates(self) -> tuple[Code, ...]:
         """Codes still consistent with every answer so far.
 
-        Never empty -- an answer that would empty it raises instead. Typed as a
-        read-only sequence; callers must not mutate what they get back.
+        Never empty -- an answer that would empty it raises instead. A tuple
+        rather than a list, so callers genuinely cannot mutate solver state
+        through it. The tuple is built once per answer in `update`, so repeated
+        reads are free and always return the same object.
         """
         return self._candidates
 
     @property
-    def guess_pool(self) -> Sequence[Code]:
+    def guess_pool(self) -> tuple[Code, ...]:
         """The codes this solver will consider guessing this turn."""
         return self._candidates if self.restrict_to_candidates else self._space
 
@@ -95,7 +97,10 @@ class BaseSolver(ABC):
                 f"no code can answer {feedback} to {''.join(guess)} and still "
                 f"match every earlier answer; one of them must be wrong"
             )
-        self._candidates = survivors
+        # Frozen here, once per answer, rather than copied on every read.
+        # `candidates` hands this exact object out, so the snapshot is
+        # genuinely immutable and costs nothing per access.
+        self._candidates = tuple(survivors)
         self._survivor_set = set(survivors)
         self._answers += 1
 

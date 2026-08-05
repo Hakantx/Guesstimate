@@ -5,6 +5,8 @@ import random
 import statistics
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from guesstimate.core import Code, Feedback, Ruleset, all_candidates, score
 from guesstimate.solvers import (
@@ -19,6 +21,8 @@ from guesstimate.solvers import (
     clear_opening_cache,
 )
 from guesstimate.solvers.partition import _OPENING_CACHE
+
+from .strategies import codes, rulesets
 
 SOLVER_CLASSES = [RandomSolver, MinimaxSolver, ExpectedSizeSolver, EntropySolver]
 SOLVER_IDS = ["random", "minimax", "expected-size", "entropy"]
@@ -195,8 +199,17 @@ def test_entropy_cost_is_negated_so_that_lower_means_more_information():
 # still pass.
 
 
-@pytest.fixture(autouse=True)
-def _isolate_opening_cache():
+@pytest.fixture
+def empty_opening_cache():
+    """Start and end with no cached openings.
+
+    Requested by name rather than autouse. An autouse function-scoped fixture
+    would interleave with the module-scoped sweep below in an order nobody
+    states out loud -- it works today only because pytest builds higher-scoped
+    fixtures first, and it would quietly start clearing the cache between the
+    sweep's games if that fixture were ever rescoped. The sweep clears the
+    cache itself instead, so neither depends on the other's timing.
+    """
     clear_opening_cache()
     yield
     clear_opening_cache()
@@ -205,7 +218,9 @@ def _isolate_opening_cache():
 @pytest.mark.parametrize(
     "solver_class", [MinimaxSolver, ExpectedSizeSolver, EntropySolver]
 )
-def test_the_cached_opening_is_what_the_search_would_have_returned(solver_class):
+def test_the_cached_opening_is_what_the_search_would_have_returned(
+    solver_class, empty_opening_cache
+):
     uncached = solver_class(SMALL)._search()
     clear_opening_cache()
     assert solver_class(SMALL).guess() == uncached
@@ -215,13 +230,13 @@ def test_the_cached_opening_is_what_the_search_would_have_returned(solver_class)
 @pytest.mark.parametrize(
     "solver_class", [MinimaxSolver, ExpectedSizeSolver, EntropySolver]
 )
-def test_the_opening_is_cached_after_the_first_game(solver_class):
+def test_the_opening_is_cached_after_the_first_game(solver_class, empty_opening_cache):
     assert not _OPENING_CACHE
     solver_class(SMALL).guess()
     assert list(_OPENING_CACHE) == [(solver_class, SMALL, True)]
 
 
-def test_rulesets_and_restrictions_get_their_own_entries():
+def test_rulesets_and_restrictions_get_their_own_entries(empty_opening_cache):
     other = Ruleset(3, "12345", allow_repeats=True)
     MinimaxSolver(SMALL).guess()
     MinimaxSolver(SMALL, restrict_to_candidates=False).guess()
@@ -235,7 +250,7 @@ def test_rulesets_and_restrictions_get_their_own_entries():
     }
 
 
-def test_a_cached_opening_never_answers_for_a_later_turn():
+def test_a_cached_opening_never_answers_for_a_later_turn(empty_opening_cache):
     # Only turn one is fixed across games; reusing it afterwards would make the
     # solver replay its opening forever.
     solver = MinimaxSolver(SMALL)
@@ -244,7 +259,7 @@ def test_a_cached_opening_never_answers_for_a_later_turn():
     assert solver.guess() != opening
 
 
-def test_random_openings_still_vary_with_the_seed():
+def test_random_openings_still_vary_with_the_seed(empty_opening_cache):
     # RandomSolver is not a PartitionSolver, so it is excluded by construction.
     # If the cache ever migrates up to BaseSolver, this is what catches it.
     openings = {RandomSolver(SMALL, rng=random.Random(s)).guess() for s in range(20)}
@@ -252,7 +267,7 @@ def test_random_openings_still_vary_with_the_seed():
     assert not _OPENING_CACHE
 
 
-def test_clearing_the_cache_empties_it():
+def test_clearing_the_cache_empties_it(empty_opening_cache):
     MinimaxSolver(SMALL).guess()
     assert _OPENING_CACHE
     clear_opening_cache()
@@ -283,19 +298,33 @@ SWEEP = Ruleset(4, "123456")
 
 @pytest.fixture(scope="module")
 def sweep_results() -> dict[str, list[int]]:
+    """Every secret played by every solver, once, and shared by the tests below.
+
+    Module-scoped on purpose: the first game of each solver pays for the
+    opening and the other 359 reuse it, which is the difference between 35
+    seconds and about twenty minutes. Clearing the cache here rather than
+    depending on a fixture elsewhere keeps that guarantee local -- this
+    function is self-contained, and no fixture ordering can weaken it.
+    """
+    clear_opening_cache()
     secrets = all_candidates(SWEEP)
-    return {
+    results = {
         name: [play(cls(SWEEP, rng=random.Random(0)), secret) for secret in secrets]
         for name, cls in SOLVERS.items()
     }
+    clear_opening_cache()
+    return results
 
 
 @pytest.mark.slow
 def test_no_solver_exceeds_the_guess_ceiling(sweep_results):
-    # Measured worst case is 6 for all four. The ceiling is a regression guard
-    # with one turn of headroom, not a published result -- Phase 3 owns those.
+    # Tight against the measurement: all four peak at exactly 6 over these 360
+    # secrets. A ceiling with a turn of headroom would miss the likeliest
+    # regression there is -- one that costs exactly one extra guess -- so this
+    # is set to the measured value, not above it. If a deliberate change moves
+    # it, update the number and say why in the commit.
     for name, counts in sweep_results.items():
-        assert max(counts) <= 7, f"{name} took {max(counts)} guesses"
+        assert max(counts) <= 6, f"{name} took {max(counts)} guesses"
 
 
 @pytest.mark.slow
@@ -371,3 +400,135 @@ def test_ties_among_candidates_go_to_the_earliest_in_alphabet_order():
     tied = [guess for guess, cost in costs.items() if cost == best]
     assert len(tied) > 1, "no tie to break"
     assert solver.guess() == min(tied, key=order.index)
+
+
+# --- properties ------------------------------------------------------------
+#
+# Everything above plays fixed rulesets. These generate them, which is where
+# the assumptions nobody wrote down get found: alphabets that are not digits,
+# lengths of one, repeats allowed, spaces of a single code.
+#
+# Solvers are quadratic per turn, so the spaces stay small. That is a real
+# limit -- these properties say nothing about the 3024 game directly -- but the
+# invariants are structural and do not care how big the space is.
+SOLVER_MAX_SPACE = 60
+
+
+@st.composite
+def solver_games(draw: st.DrawFn) -> tuple[Ruleset, Code]:
+    """A ruleset small enough to solve, and a secret from it."""
+    ruleset = draw(rulesets(max_space=SOLVER_MAX_SPACE))
+    return ruleset, draw(codes(ruleset))
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+@given(solver_games())
+@settings(deadline=None, max_examples=50)
+def test_the_secret_is_never_eliminated(solver_class, case):
+    # The single strongest invariant in the project. Every guess narrows the
+    # candidate set using feedback the secret itself produced, so the secret is
+    # consistent with every answer by construction and can never be filtered
+    # out. If it ever is, scoring and filtering disagree and every result the
+    # project produces is worthless.
+    ruleset, secret = case
+    solver = solver_class(ruleset, rng=random.Random(0))
+    for _ in range(ruleset.space_size + 1):
+        guess = solver.guess()
+        feedback = score(secret, guess)
+        solver.update(guess, feedback)
+        assert secret in solver.candidates
+        if feedback.is_win(ruleset.length):
+            assert solver.candidates == (secret,)
+            return
+    raise AssertionError("solver never won")
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+@given(solver_games())
+@settings(deadline=None, max_examples=50)
+def test_the_candidate_set_only_ever_shrinks(solver_class, case):
+    ruleset, secret = case
+    solver = solver_class(ruleset, rng=random.Random(0))
+    previous = len(solver.candidates)
+    for _ in range(ruleset.space_size + 1):
+        guess = solver.guess()
+        feedback = score(secret, guess)
+        solver.update(guess, feedback)
+        assert len(solver.candidates) <= previous
+        if feedback.is_win(ruleset.length):
+            return
+        # A losing guess is eliminated by its own answer, so progress is
+        # guaranteed and the game cannot stall.
+        assert len(solver.candidates) < previous
+        previous = len(solver.candidates)
+    raise AssertionError("solver never won")
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+@given(solver_games(), st.booleans())
+@settings(deadline=None, max_examples=50)
+def test_every_guess_comes_from_the_declared_pool(solver_class, case, restricted):
+    ruleset, secret = case
+    solver = solver_class(
+        ruleset, restrict_to_candidates=restricted, rng=random.Random(0)
+    )
+    for _ in range(ruleset.space_size + 1):
+        guess = solver.guess()
+        assert guess in solver.guess_pool
+        if restricted or isinstance(solver, RandomSolver):
+            # RandomSolver documents that it ignores the flag.
+            assert guess in solver.candidates
+        feedback = score(secret, guess)
+        solver.update(guess, feedback)
+        if feedback.is_win(ruleset.length):
+            return
+    raise AssertionError("solver never won")
+
+
+@pytest.mark.parametrize(
+    "solver_class", [MinimaxSolver, ExpectedSizeSolver, EntropySolver]
+)
+@given(solver_games())
+@settings(deadline=None, max_examples=50)
+def test_deterministic_solvers_replay_identically(solver_class, case):
+    # Benchmarks are only comparable if a solver plays the same game twice.
+    ruleset, secret = case
+
+    def transcript() -> list[Code]:
+        solver = solver_class(ruleset)
+        guesses: list[Code] = []
+        for _ in range(ruleset.space_size + 1):
+            guess = solver.guess()
+            guesses.append(guess)
+            feedback = score(secret, guess)
+            solver.update(guess, feedback)
+            if feedback.is_win(ruleset.length):
+                return guesses
+        raise AssertionError("solver never won")
+
+    clear_opening_cache()
+    cold = transcript()
+    warm = transcript()  # second run is served the cached opening
+    assert cold == warm
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+@given(solver_games())
+@settings(deadline=None, max_examples=50)
+def test_candidates_is_an_immutable_snapshot(solver_class, case):
+    ruleset, secret = case
+    solver = solver_class(ruleset, rng=random.Random(0))
+    snapshot = solver.candidates
+    assert isinstance(snapshot, tuple)
+    # Same object every read: the tuple is built when the set changes, not when
+    # it is looked at, so exposing it costs nothing.
+    assert solver.candidates is snapshot
+    # And a caller genuinely cannot narrow the solver from outside.
+    assert not hasattr(snapshot, "append")
+
+    guess = solver.guess()
+    solver.update(guess, score(secret, guess))
+    # A caller still holding the old snapshot sees the old set: narrowing
+    # replaced the tuple rather than editing one the caller was pointing at.
+    assert len(snapshot) == ruleset.space_size
+    assert len(solver.candidates) <= len(snapshot)

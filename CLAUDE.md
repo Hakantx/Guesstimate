@@ -153,8 +153,10 @@ tests/
 
 - **Restricted vs unrestricted guessing.** Minimax and entropy can be limited
   to surviving candidates, or allowed to guess anything in the full space.
-  Unrestricted is stronger. Implement both, make it a flag, benchmark both,
-  and explain the tradeoff in a comment.
+  Unrestricted is *expected* to be stronger — that is the standard argument,
+  not a result from this repo. Both are implemented and flagged as of Phase 2;
+  Phase 3 benchmarks them and settles it. Until then it does not get stated as
+  fact anywhere, and once it is measured the number goes in next to the claim.
 
 - **The adversarial codemaker must never contradict itself.** It picks the
   feedback that maximizes the surviving set, but that set has to stay

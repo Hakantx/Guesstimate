@@ -76,9 +76,14 @@ Property tests with Hypothesis:
 | `EntropySolver` | maximizes information gained, in bits | information-theoretic, often ties minimax |
 
 Every solver takes a `restrict_to_candidates: bool` flag. When False it may
-guess anything in the full space, including numbers already ruled out — which
-is sometimes stronger, because a guess that cannot possibly win can still split
-the remaining set better than any that can.
+guess anything in the full space, including numbers already ruled out.
+
+**Expected, not measured:** the reasoning is that a guess which cannot possibly
+win can still split the remaining set better than any guess that can, so
+spending a turn on information should pay for itself. That is the standard
+argument and it is plausible, but as of Phase 2 nobody here has run it. Both
+modes are implemented and tested; neither has been benchmarked against the
+other. Until Phase 3 settles it, do not write it down as fact.
 
 Write minimax naively. It will be slow. That is deliberate; Phase 5 measures
 the speedup.
@@ -144,6 +149,19 @@ from that machine. The harness still needs resumable runs and a `--sample N`
 flag from the start — 300 is the default, not a ceiling. Two cores also means
 process-level parallelism buys about 2x and no more; do not design around a
 core count that does not exist. Record the machine alongside the numbers.
+
+### Named deliverable: settle restricted vs unrestricted
+
+Phase 2 shipped the `restrict_to_candidates` flag on the strength of an
+argument, not a measurement. Phase 3 measures it: run every scoring solver both
+ways over the same seeded sample and report mean, worst case, and wall clock
+for each. Unrestricted searches the full space every turn, so it is expected to
+cost several times more time per game — the question is whether it buys enough
+guesses back to be worth it, and for which strategy.
+
+Whatever comes out, it gets written down. If unrestricted turns out to be no
+better, that is the more interesting result and it goes in the README next to
+the numbers that show it.
 
 Add the information-theoretic floor to the writeup: with 3024 equally likely
 secrets and 14 feedback outcomes, no strategy can average fewer than

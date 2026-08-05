@@ -6,7 +6,6 @@ built. That is what lets Phase 5 hand the matrix-backed solvers an extra
 constructor argument without this file, the API, or the UI changing at all.
 """
 
-from collections.abc import Sequence
 from typing import Protocol
 
 from guesstimate.core import Code, Feedback
@@ -31,12 +30,20 @@ class Solver(Protocol):
     """
 
     @property
-    def candidates(self) -> Sequence[Code]:
+    def candidates(self) -> tuple[Code, ...]:
         """Every code still consistent with all feedback so far.
 
         Never empty: an answer that would empty it raises
         `InconsistentFeedbackError` instead. Ordered as `all_candidates`
         orders the full space, which is what the Phase 7 grid animates.
+
+        A tuple, not a `Sequence`, and deliberately so. `Sequence` is read-only
+        only to the type checker -- an implementation returning its own list
+        would hand callers a live handle on solver state, and the Phase 6 API
+        would pass that straight out to route handlers. Requiring a tuple makes
+        the guarantee real at runtime for every implementation, and costs
+        nothing if the snapshot is built when the candidate set changes rather
+        than when it is read.
         """
         ...
 
