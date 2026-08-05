@@ -32,8 +32,8 @@ never modified.
 |---|---|---|
 | 0 | Preserve and scaffold | done |
 | 1 | The engine | done |
-| 2 | Solvers | |
-| 3 | Benchmark suite | |
+| 2 | Solvers | done |
+| 3 | Benchmark suite | in progress |
 | 4 | CLI | |
 | 5 | Make it fast | |
 | 6 | API and game server | |
@@ -56,7 +56,29 @@ make check      # lint + types + tests, the same set CI runs
 ```
 
 Individual targets: `make lint`, `make fmt`, `make types`, `make test`,
-`make cov`. Run `make help` for the full list.
+`make test-fast`, `make cov`. Run `make help` for the full list.
+
+## Benchmarks
+
+```sh
+make bench                          # 300 secrets, every solver
+make bench ARGS="--sample 50"       # quicker
+make bench ARGS="--unrestricted"    # both guessing modes, ~4.6x slower
+```
+
+Results land in [`docs/benchmarks/`](docs/benchmarks/) — a markdown report plus
+charts, regenerated from scratch every run. Three things the harness insists on:
+
+- **Paired sampling.** Every solver plays the same seeded secrets in the same
+  order, and comparisons are per-secret differences rather than differences of
+  means. Guess counts vary by whole turns between secrets while the gap between
+  good strategies is under a tenth of a turn, so unpaired means cannot see it.
+- **Split timings.** The opening move costs tens of seconds and every game after
+  it about two, so the two are reported separately rather than averaged into a
+  per-game figure that describes neither.
+- **Provenance.** Every report carries the commit, machine, Python version,
+  ruleset, sample size, and seed that produced it. Runs are resumable and refuse
+  to continue into a file written by a different run.
 
 ## License
 
