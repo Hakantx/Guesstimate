@@ -12,7 +12,7 @@ authors = [
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/hakanctx/Guesstimate"
+Repository = "https://github.com/Hakantx/Guesstimate"
 
 [dependency-groups]
 dev = [
