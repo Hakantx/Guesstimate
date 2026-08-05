@@ -76,9 +76,14 @@ Property tests with Hypothesis:
 | `EntropySolver` | maximizes information gained, in bits | information-theoretic, often ties minimax |
 
 Every solver takes a `restrict_to_candidates: bool` flag. When False it may
-guess anything in the full space, including numbers already ruled out — which
-is sometimes stronger, because a guess that cannot possibly win can still split
-the remaining set better than any that can.
+guess anything in the full space, including numbers already ruled out.
+
+**Expected, not measured:** the reasoning is that a guess which cannot possibly
+win can still split the remaining set better than any guess that can, so
+spending a turn on information should pay for itself. That is the standard
+argument and it is plausible, but as of Phase 2 nobody here has run it. Both
+modes are implemented and tested; neither has been benchmarked against the
+other. Until Phase 3 settles it, do not write it down as fact.
 
 Write minimax naively. It will be slow. That is deliberate; Phase 5 measures
 the speedup.
@@ -94,7 +99,7 @@ guess ceiling across a sampled sweep of secrets.
 
 ## Phase 3 — Benchmark suite
 
-`guesstimate/bench/` runs every solver against all 3024 secrets and reports:
+`guesstimate/bench/` runs every solver over a set of secrets and reports:
 
 - mean, median, worst case, and standard deviation of guess count
 - the full distribution as a histogram
@@ -104,12 +109,59 @@ guess ceiling across a sampled sweep of secrets.
 Emit a markdown table plus matplotlib charts into `docs/benchmarks/`. Wire it
 to `make bench`. Seed every random source so runs reproduce.
 
+### Sample size
+
+**The naive solvers benchmark a seeded random sample of 300 secrets, not all
+3024.**
+
+Phase 2 measured a scoring solver at roughly 51 seconds per game on the
+reference machine, of which turn one was 99.5% — the opening scores all 3024
+guesses against all 3024 candidates, and every turn after that works on a few
+hundred survivors. Since the opening is identical in every game, Phase 2 caches
+it per `(strategy, ruleset, restriction)`. That is bookkeeping, not the Phase 5
+matrix work, and it does not spoil that measurement.
+
+Measured over 30 warm games per solver: the first game still costs ~51s, and
+every game after it averages **2.13s** (sd 1.62, median 1.38, range 0.02–4.23).
+The spread is wide and right-skewed because turn two's cost depends on how many
+candidates survived turn one, which varies by secret — so the mean is what the
+projections below use, not the median.
+
+| Sweep | Per solver | Three scoring solvers |
+|---|---|---|
+| 300 secrets | ~11.5 min | ~35 min |
+| 3024 secrets | ~108 min | ~5.4 hours |
+
+Sampling is what keeps this a benchmark rather than an afternoon. The standard
+error on mean guess count at n=300 is well under a tenth of a turn, far finer
+than the gaps between strategies, so nothing worth seeing is lost.
+
+Full 3024-secret sweeps happen after Phase 5, when the feedback matrix makes
+them cheap. `RandomSolver` is fast enough to sweep in full at any time.
+
+Every published table states its sample size, its seed, and the machine. A mean
+guess count with no n beside it is not a result, and a table that mixes a
+300-sample solver with a 3024-sample one without saying so is worse than no
+table at all.
+
 Reference hardware is a 2017 dual-core Intel i7. Every published number comes
-from that machine, and it is slow enough that a full naive-minimax sweep over
-3024 secrets is an overnight job, not a coffee break — so the harness needs
-resumable runs and a `--sample N` flag from the start. Two cores also means
+from that machine. The harness still needs resumable runs and a `--sample N`
+flag from the start — 300 is the default, not a ceiling. Two cores also means
 process-level parallelism buys about 2x and no more; do not design around a
 core count that does not exist. Record the machine alongside the numbers.
+
+### Named deliverable: settle restricted vs unrestricted
+
+Phase 2 shipped the `restrict_to_candidates` flag on the strength of an
+argument, not a measurement. Phase 3 measures it: run every scoring solver both
+ways over the same seeded sample and report mean, worst case, and wall clock
+for each. Unrestricted searches the full space every turn, so it is expected to
+cost several times more time per game — the question is whether it buys enough
+guesses back to be worth it, and for which strategy.
+
+Whatever comes out, it gets written down. If unrestricted turns out to be no
+better, that is the more interesting result and it goes in the README next to
+the numbers that show it.
 
 Add the information-theoretic floor to the writeup: with 3024 equally likely
 secrets and 14 feedback outcomes, no strategy can average fewer than
@@ -292,6 +344,13 @@ ten seconds.
 ## What to skip
 
 User accounts, a database, real-time multiplayer, server-persisted
-leaderboards, native mobile apps. Each adds infrastructure and none makes the
-project more impressive. Daily challenge plus LocalStorage stats gets ~90% of
-the engagement for none of the operational cost.
+leaderboards. Each adds infrastructure and none makes the project more
+impressive. Daily challenge plus LocalStorage stats gets ~90% of the engagement
+for none of the operational cost.
+
+Mobile apps are **deferred, not skipped**. `MOBILE.md` specs a PWA foundation
+and the two store builds as phases that start after Phase 9, and deliberately
+does not number them here — nothing about them gets built until the web game is
+finished. Two of its constraints do bind from Phase 1 onward, and they are
+rules 9 and 10 in `CLAUDE.md`: keep the engine portable, and never let
+server-authoritative state become the only way to play.

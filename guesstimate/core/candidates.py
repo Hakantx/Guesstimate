@@ -1,6 +1,7 @@
 """Enumerating the candidate space, narrowing it, and listing the outcomes."""
 
 import itertools
+from collections.abc import Sequence
 
 from .code import Code
 from .feedback import Feedback
@@ -25,7 +26,7 @@ def all_candidates(ruleset: Ruleset) -> list[Code]:
 
 
 def filter_candidates(
-    candidates: list[Code], guess: Code, feedback: Feedback
+    candidates: Sequence[Code], guess: Code, feedback: Feedback
 ) -> list[Code]:
     """Keep the candidates still consistent with an answer.
 
