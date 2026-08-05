@@ -3,7 +3,12 @@
 Rules for working in this repo. Read this first, every session.
 
 Companion docs: `ROADMAP.md` (build order), `FEATURES.md` (feature specs),
-`DESIGN.md` (visual direction). Read the relevant one before starting a phase.
+`DESIGN.md` (visual direction), `MOBILE.md` (app store strategy). Read the
+relevant one before starting a phase.
+
+`MOBILE.md` describes work deferred until after Phase 9 — its phases are
+deliberately absent from `ROADMAP.md` and nothing in it gets built yet. Two of
+its constraints bind now anyway, and they are rules 9 and 10 below.
 
 ## What this is
 
@@ -62,6 +67,30 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
 8. **Never invent benchmark numbers.** Every figure that appears in the README
    comes from a run of `make bench` on this machine. If a number is not
    measured, it does not get written down.
+
+9. **The engine gets ported to TypeScript, so write it portably.** `core/` and
+   `solvers/` are ported later for on-device play (`MOBILE.md`), with a
+   cross-language test asserting both implementations agree over the same
+   seeded games. That port is a transcription, not a redesign, only if the
+   Python stays small, dependency-free, and free of constructs with no TS
+   equivalent: no metaclasses, no descriptors, no `__slots__` tricks, no
+   operator-overloading cleverness, no dynamic attribute access, no reliance on
+   generator laziness for correctness. Prefer plain functions over data,
+   explicit loops over comprehension chains that only read well in Python, and
+   stdlib types that map cleanly onto JS ones. `itertools` and `Counter` are
+   fine — they are twenty lines of TypeScript each. numpy in `core/` is not,
+   which is another reason the matrix lives in `data/`. This constrains the
+   engine only; everything above it can be as Pythonic as it likes.
+
+10. **Server-authoritative game state cannot be the only path.** Phase 6 keeps
+    the secret server-side and that stays correct for the web. But the same
+    game logic has to be able to sit behind a local in-process solver with no
+    network at all, because offline play is what makes the mobile app more
+    than a website in a shell. So define the game as an interface with two
+    implementations — remote-backed and local — rather than as a set of HTTP
+    routes with logic in them. Anything that assumes a round trip, a session
+    id, or a server clock is a Phase 6 detail and does not belong in the
+    shared layer.
 
 ## Stack
 
@@ -134,8 +163,11 @@ tests/
   set is non-empty at every step.
 
 - **Don't leak the secret to the browser.** Game state lives server-side, keyed
-  by session id. In client-side WASM mode (Phase 10) this changes — document
-  the difference.
+  by session id. In the client-side modes — WASM in Phase 11, the TypeScript
+  solver port in `MOBILE.md` — the secret necessarily lives in the client, and
+  the protection it buys is gone. That is an acceptable trade for offline play
+  and a bad surprise if it happens by accident, so it must be a deliberate,
+  documented mode switch and never the default for a hosted game.
 
 ## Style
 
