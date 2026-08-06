@@ -163,6 +163,25 @@ Whatever comes out, it gets written down. If unrestricted turns out to be no
 better, that is the more interesting result and it goes in the README next to
 the numbers that show it.
 
+**Answered, partially.** Classic 3024 ruleset, 100 paired secrets, both sides
+deterministic so the pairing is tight (correlations +0.49 to +0.78):
+
+| Solver | Restricted | Unrestricted | Paired diff | 95% CI | Significant | Cost |
+|---|---|---|---|---|---|---|
+| entropy | 4.970 | 4.840 | +0.130 | [+0.010, +0.250] | yes | 5.3x slower |
+| expected-size | 4.920 | 4.760 | +0.160 | [-0.034, +0.354] | no | 6.1x slower |
+| minimax | 4.870 | 4.930 | -0.060 | [-0.224, +0.104] | no | 5.8x slower |
+
+So the received wisdom holds for entropy and only just — the interval's lower
+edge is +0.010. For expected-size it points the right way without clearing the
+bar. For minimax the mean does not improve at all, though its sample maximum
+falls from 7 to 6, which is the column it actually optimises and the one a
+sample cannot settle.
+
+Restricted stays the default: five to six times the runtime for a tenth of a
+guess, on one solver of three, is not a trade worth making by default. Revisit
+at n=300 and on a full sweep after Phase 5.
+
 Add the information-theoretic floor to the writeup: with 3024 equally likely
 secrets and 14 feedback outcomes, no strategy can average fewer than
 log2(3024)/log2(14) guesses. Compute it, compare it to what the best solver

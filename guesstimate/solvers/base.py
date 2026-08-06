@@ -41,6 +41,12 @@ class BaseSolver(ABC):
             and ignore it, but they accept it to keep the signature uniform.
     """
 
+    #: Whether two runs on the same secret can differ. The three scoring
+    #: strategies are fully determined by the ruleset, so repeating one is
+    #: wasted work; `RandomSolver` is not, and its score for a secret is one
+    #: draw from a distribution rather than a property of the secret.
+    stochastic: bool = False
+
     def __init__(
         self,
         ruleset: Ruleset,
