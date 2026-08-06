@@ -9,7 +9,12 @@ authors = [
     { name = "Akif Celepcikay" },  # original 2021 version, preserved in legacy/
     { name = "Hakan Celepcikay" }, # 2026 rebuild
 ]
-dependencies = []
+dependencies = [
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+guesstimate = "guesstimate.cli:main"
 
 [project.urls]
 Repository = "https://github.com/Hakantx/Guesstimate"
