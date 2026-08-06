@@ -33,8 +33,8 @@ never modified.
 | 0 | Preserve and scaffold | done |
 | 1 | The engine | done |
 | 2 | Solvers | done |
-| 3 | Benchmark suite | in progress |
-| 4 | CLI | |
+| 3 | Benchmark suite | done |
+| 4 | CLI | in progress |
 | 5 | Make it fast | |
 | 6 | API and game server | |
 | 7 | The web app | |

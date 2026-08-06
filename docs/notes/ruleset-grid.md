@@ -42,6 +42,22 @@ give or take 0.108, so there is no demonstrated difference between any two of
 them. Separating these would need many more secrets per ruleset, or many more
 rulesets strung out along one axis with the others genuinely held still.
 
+## What this grid does not cover
+
+Only one strategy was measured — the entropy solver — against the random
+baseline. Minimax and expected-size are unmeasured on four of these five
+rulesets, and minimax is the interesting omission, since it optimises the worst
+case rather than the mean and could plausibly behave differently as the shape
+of the ruleset changes.
+
+Running them is deliberately *not* the next step. Three solvers across five
+rulesets produces fifteen overlapping intervals rather than five, and the
+limiting factor here is the number of rulesets, not the number of solvers —
+adding solvers buys no power to separate the axes the grid was built to
+separate. The useful version of this experiment is more rulesets strung along
+a single axis with the others genuinely held still, at which point running all
+three solvers over it costs little extra and answers something.
+
 Two things to carry forward. A non-significant result is a wide interval, not a
 zero — the discipline is to report the interval and stop, rather than to
 convert it into a claim about the world that happens to be more interesting than
