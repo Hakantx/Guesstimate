@@ -2,6 +2,7 @@
 
 import json
 import statistics
+from pathlib import Path
 
 import pytest
 
@@ -434,3 +435,56 @@ def test_the_cli_parses_the_documented_flags():
     # duplicate rather than a measurement.
     assert "random/unrestricted" not in names
     assert "entropy/unrestricted" in names
+
+
+# --- the dirty flag --------------------------------------------------------
+#
+# A benchmark writes its results into the working tree, so asking "is the tree
+# dirty" without excluding those results answers "yes, always" -- and a run
+# with a genuinely uncommitted solver change looks identical to a clean one.
+
+
+def test_output_directory_changes_do_not_count_as_a_dirty_tree(tmp_path):
+    from guesstimate.bench.provenance import _tree_is_dirty
+
+    # The real repo, with the real bench output directory excluded.
+    assert _tree_is_dirty(Path("docs/benchmarks/full")) in (True, False)
+
+
+def test_the_dirty_check_still_notices_changes_outside_the_output(monkeypatch):
+    from guesstimate.bench import provenance as module
+
+    monkeypatch.setattr(
+        module,
+        "_git",
+        lambda *a: " M guesstimate/solvers/base.py" if a[0] == "status" else "/repo",
+    )
+    assert module._tree_is_dirty(Path("/repo/docs/benchmarks")) is True
+
+
+def test_only_output_changes_read_as_clean(monkeypatch):
+    from guesstimate.bench import provenance as module
+
+    def fake_git(*args: str) -> str:
+        if args[0] == "status":
+            return "?? docs/benchmarks/full/"
+        return "/repo"
+
+    monkeypatch.setattr(module, "_git", fake_git)
+    assert module._tree_is_dirty(Path("/repo/docs/benchmarks/full")) is False
+
+
+def test_a_clean_tree_is_clean(monkeypatch):
+    from guesstimate.bench import provenance as module
+
+    monkeypatch.setattr(module, "_git", lambda *a: "")
+    assert module._tree_is_dirty(None) is False
+
+
+def test_capture_without_an_output_dir_counts_everything(monkeypatch):
+    from guesstimate.bench import provenance as module
+
+    monkeypatch.setattr(
+        module, "_git", lambda *a: "?? anything" if a[0] == "status" else "/repo"
+    )
+    assert module._tree_is_dirty(None) is True

@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     size = None if args.full else args.sample
     sample = draw_sample(ruleset, size, args.seed)
-    provenance = Provenance.capture(ruleset, len(sample), args.seed)
+    provenance = Provenance.capture(ruleset, len(sample), args.seed, args.out)
 
     args.out.mkdir(parents=True, exist_ok=True)
     if args.report_only:
@@ -119,6 +119,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     summaries = []
+    # Whether every secret is played decides whether the maximum guess count
+    # is *the* worst case or merely the worst one drawn -- and the console
+    # summary has to use the same word the published table does.
+    exhaustive = len(sample) == ruleset.space_size
     guess_counts: dict[str, list[float]] = {}
     started = time.perf_counter()
     for config in configs:
@@ -142,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
         summaries.append(summary)
         guess_counts[config.name] = per_secret_guesses(result.records)
         print(
-            f"{config.name}: mean {summary.mean:.3f}, sample max {summary.worst}, "
+            f"{config.name}: mean {summary.mean:.3f}, "
+            f"{'worst' if exhaustive else 'sample max'} {summary.worst}, "
             f"cold open {summary.cold_open_seconds:.1f}s, "
             f"{time.perf_counter() - config_started:.0f}s total",
             flush=True,
@@ -157,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         guess_counts,
         floor,
         baseline,
-        exhaustive=len(sample) == ruleset.space_size,
+        exhaustive=exhaustive,
     )
     (args.out / "README.md").write_text(report, encoding="utf-8")
     print(f"wrote {args.out / 'README.md'}")

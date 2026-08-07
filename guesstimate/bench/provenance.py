@@ -7,9 +7,34 @@ import platform
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from guesstimate.core import Ruleset
+
+
+def _tree_is_dirty(output_dir: Path | None) -> bool:
+    """Whether anything outside the run's own output differs from the commit."""
+    status = _git("status", "--porcelain")
+    if not status:
+        return False
+
+    ignored = None
+    if output_dir is not None:
+        root = _git("rev-parse", "--show-toplevel")
+        try:
+            ignored = output_dir.resolve().relative_to(Path(root).resolve())
+        except (ValueError, OSError):
+            ignored = None
+
+    for line in status.splitlines():
+        path = line[3:].strip().strip('"')
+        if ignored is not None and Path(path) == ignored:
+            continue
+        if ignored is not None and str(ignored) in path:
+            continue
+        return True
+    return False
 
 
 def _git(*args: str) -> str:
@@ -30,10 +55,16 @@ class Provenance:
     six weeks later. Rule 8 says published figures come from `make bench` --
     that is only checkable if each table says which run produced it.
 
-    One known limit: `git_dirty` records whether the tree had uncommitted
-    changes, but two dirty trees at the same commit look identical here. A
-    resumed run can therefore span an edit. The flag at least marks the numbers
-    as not corresponding to any commit anyone else can check out.
+    `git_dirty` asks whether the *code* differs from the commit, ignoring the
+    benchmark's own output directory. Without that exclusion the flag is
+    useless: the harness writes its results into the tree, so every run would
+    report itself dirty on account of the files it had just written, and a
+    genuinely uncommitted solver change would look exactly the same.
+
+    One limit remains: two dirty trees at the same commit are indistinguishable
+    here, so a resumed run can span an edit. The flag marks the numbers as not
+    corresponding to anything another person can check out, which is the
+    important part.
     """
 
     git_sha: str
@@ -48,11 +79,22 @@ class Provenance:
     started_utc: str
 
     @classmethod
-    def capture(cls, ruleset: Ruleset, sample_size: int, seed: int) -> Provenance:
-        """Read the current machine, checkout, and run parameters."""
+    def capture(
+        cls,
+        ruleset: Ruleset,
+        sample_size: int,
+        seed: int,
+        output_dir: Path | None = None,
+    ) -> Provenance:
+        """Read the current machine, checkout, and run parameters.
+
+        `output_dir` is where this run will write. Changes under it are not
+        counted as a dirty tree -- they are the run's own results, not a code
+        difference that would stop someone reproducing the numbers.
+        """
         return cls(
             git_sha=_git("rev-parse", "HEAD") or "unknown",
-            git_dirty=bool(_git("status", "--porcelain")),
+            git_dirty=_tree_is_dirty(output_dir),
             python=f"{platform.python_implementation()} {platform.python_version()}",
             machine=platform.platform(),
             processor=platform.processor() or "unknown",

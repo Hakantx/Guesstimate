@@ -235,8 +235,32 @@ what the opening book buys on top.
 This is the section an interviewer will ask about. Every number must be one you
 measured yourself.
 
+### Named deliverable: test Knuth's claim properly
+
+Phase 3 measured every solver over all 3024 secrets and found **restricted
+minimax dominated** — worst case 7, identical to entropy and expected-size, and
+a worse mean than either (5.044 against 5.008 and 5.011). It is paying for a
+guarantee the other two get for free.
+
+That is not yet a verdict on Knuth's method, because Knuth's guarantee comes
+from *unrestricted* minimax: a solver allowed to play codes already ruled out,
+on the grounds that a guess which cannot win may still split the survivors
+better than any that can. Every full-sweep number so far is restricted. Over 100
+sampled secrets, unrestricted minimax's sample maximum was 6 where restricted's
+was 7 — one sample, but pointing at exactly the column the strategy exists to
+improve.
+
+The run that settles it is a full 3024-secret unrestricted sweep. At roughly
+5.8x the cost of a restricted one that is about ten hours naively, which is why
+it belongs here rather than in Phase 3: the matrix should make it affordable,
+and if it does not, that is itself worth reporting.
+
+Report worst case first, mean second, and put the answer next to the dominance
+finding in `docs/notes/minimax-mean-vs-worst.md` whichever way it falls.
+
 **Done when:** a full minimax benchmark runs in seconds, with before/after
-timings committed.
+timings committed, and unrestricted minimax has been swept over all 3024
+secrets with its worst case published.
 
 ---
 
