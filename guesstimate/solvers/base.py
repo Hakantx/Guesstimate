@@ -70,16 +70,33 @@ class BaseSolver(ABC):
         self._index_of = {code: CodeIndex(i) for i, code in enumerate(self._space)}
         self._indices: CandidateSet = self._universe
         self._survivor_set = set(self._indices)
-        self._candidates = self._space
+        # Both public views are built on demand and cached until the next
+        # answer. A caller that only wants the grid never pays to materialise
+        # symbols, and a caller that only wants symbols never pays twice.
+        self._index_snapshot: tuple[CodeIndex, ...] | None = None
+        self._code_snapshot: tuple[Code, ...] | None = None
         # How many answers this solver has absorbed. Zero means it is still on
         # its opening move, which is the one turn whose result can be reused
         # across games -- see the opening cache in `partition.py`.
         self._answers = 0
 
     @property
-    def indices(self) -> CandidateSet:
-        """The surviving candidates as indices, for a caller working in them."""
-        return self._indices
+    def candidate_indices(self) -> tuple[CodeIndex, ...]:
+        """Surviving candidates as positions in `all_candidates(ruleset)`.
+
+        The index ordering *is* the grid ordering DESIGN.md lays cells out in,
+        so the visualisation and the API want these and not symbols. Handing
+        them out directly keeps the mapping in one place: a caller that got
+        `Code` tuples and needed positions would have to rebuild a
+        code-to-position table, which is exactly the side table this layer
+        deleted by working in indices to begin with.
+
+        Plain `int`s, so the tuple serialises to JSON with no conversion, even
+        when the partitioner behind it is storing a numpy array.
+        """
+        if self._index_snapshot is None:
+            self._index_snapshot = tuple(CodeIndex(int(i)) for i in self._indices)
+        return self._index_snapshot
 
     @property
     def candidates(self) -> tuple[Code, ...]:
@@ -87,10 +104,16 @@ class BaseSolver(ABC):
 
         Never empty -- an answer that would empty it raises instead. A tuple
         rather than a list, so callers genuinely cannot mutate solver state
-        through it. The tuple is built once per answer in `update`, so repeated
-        reads are free and always return the same object.
+        through it, and cached until the next answer so repeated reads are free
+        and always return the same object.
+
+        Built lazily. The grid path reads `candidate_indices` and never touches
+        this, so narrowing does not pay to turn a few thousand indices back into
+        symbols nobody asked for.
         """
-        return self._candidates
+        if self._code_snapshot is None:
+            self._code_snapshot = tuple(self._space[i] for i in self._indices)
+        return self._code_snapshot
 
     @property
     def guess_pool(self) -> tuple[Code, ...]:
@@ -121,12 +144,13 @@ class BaseSolver(ABC):
                 f"no code can answer {feedback} to {''.join(guess)} and still "
                 f"match every earlier answer; one of them must be wrong"
             )
-        # Frozen here, once per answer, rather than copied on every read.
-        # `candidates` hands this exact object out, so the snapshot is
-        # genuinely immutable and costs nothing per access.
         self._indices = survivors
-        self._candidates = tuple(self._space[i] for i in survivors)
         self._survivor_set = set(survivors)
+        # Invalidate rather than rebuild: whichever view the caller asks for
+        # next is the only one that gets built, and neither is built at all if
+        # nobody asks.
+        self._index_snapshot = None
+        self._code_snapshot = None
         self._answers += 1
 
     def _partition(self, guess: CodeIndex) -> Sequence[int]:
