@@ -50,45 +50,81 @@ never drew a secret that costs 7.
 
 ## The external check, and the more interesting result
 
-Everything above is this repo measuring itself. The stronger test is against a
-result from outside it, and one exists: Chen, Lin and Nguyen, *Strategy
-optimization for deductive games* (EJOR), prove that **7 guesses are necessary
-and sufficient in the worst case** for Bulls and Cows.
+Everything above is this repo measuring itself. The stronger test is against
+results from outside it, and for the standard variant of this game there are
+two — one for each of the things a solver could be optimising:
 
-That theorem is stated for a different game from ours. The standard Bulls and
-Cows uses the digits 0-9 with no repeats, which is 10 × 9 × 8 × 7 = **5040**
-secrets. This project's default excludes zero, giving 9 × 8 × 7 × 6 = **3024**.
-Those are different games, and a bound proved for one says nothing directly
-about the other — so the honest move is to play the variant the theorem is
-about rather than to cite it next to numbers from a different one.
+- **Worst case.** Chen, Lin and Nguyen, *Strategy optimization for deductive
+  games* (EJOR): 7 guesses are necessary and sufficient.
+- **Expected length.** Tanaka (1996): the minimum achievable mean is **5.213**.
+
+Both are stated for a different game from ours. Standard Bulls and Cows uses
+the digits 0-9 with no repeats, which is 10 × 9 × 8 × 7 = **5040** secrets;
+this project's default excludes zero, giving 9 × 8 × 7 × 6 = **3024**. A bound
+proved for one says nothing directly about the other, so the honest move is to
+play the variant the theorems are about rather than cite them beside numbers
+from a different one.
 
 Every secret in the 5040-code variant, same four solvers:
 
-| Solver | Mean | Worst | Proven optimum |
-|---|---|---|---|
-| entropy | 5.314 | **8** | 7 |
-| expected-size | 5.319 | **8** | 7 |
-| minimax | 5.354 | **8** | 7 |
-| random | 5.458 | 9 | 7 |
+| Solver | Mean | vs 5.213 | Worst | vs 7 |
+|---|---|---|---|---|
+| entropy | 5.314 | +0.101 (+1.9%) | 8 | +1 (+14%) |
+| expected-size | 5.319 | +0.106 (+2.0%) | 8 | +1 (+14%) |
+| minimax | 5.354 | +0.141 (+2.7%) | 8 | +1 (+14%) |
+| random | 5.458 | +0.245 (+4.7%) | 9 | +2 (+29%) |
 
-**None of them attain the bound.** Every strategy here, including the one whose
-entire purpose is the worst case, needs 8 guesses on the hardest secrets where
-7 is provably enough.
+## Greedy play is near-optimal on average and a full guess off at the tail
 
-The gap is not a bug, it is the difference between two kinds of play. All four
-solvers are *greedy*: each turn they pick the guess that looks best for that
-turn, and never consider what position it leaves them in afterwards. The proven
-bound comes from optimising the whole strategy — searching over game trees for
-a policy that keeps every branch inside seven guesses, which can mean playing a
-locally worse guess now to avoid a bad split two turns later. That is what the
-paper's title means by *strategy optimization*, and it is a different and far
-more expensive computation than anything in this repo.
+The two columns tell different stories, and the difference between them is the
+most useful thing this project has measured.
 
-So the measurement that was meant to validate the solvers instead measures
-something better: **one full guess separates greedy play from optimal play on
-this game**, and it separates them for all three strategies equally. Minimax's
-worst-case focus buys nothing that the other two do not already get, and does
-not close the gap to optimal either.
+On the mean, the best solver here is **within 2%** of a bound proved to be
+unbeatable. That is close. Playing greedily — picking whatever guess looks best
+this turn, never once considering the position it leaves behind — costs about a
+tenth of a guess per game against a strategy computed by searching whole game
+trees.
+
+On the worst case, the same solver needs **a full extra guess**, 8 where 7 is
+provably enough, a 14% overshoot. And every strategy here overshoots by exactly
+one, including the strategy whose entire purpose is the worst case.
+
+That shape is what local optimisation predicts. A greedy choice is a small
+mistake most of the time: it takes the guess that splits the current candidate
+set best, which is usually also a fine guess for the game as a whole, and when
+it is slightly wrong the cost is a fraction of a turn on that one branch.
+Averaged over five thousand games those fractions stay small, which is why the
+mean lands within 2%.
+
+The worst case does not average anything. It is the single deepest branch, and
+that branch is reached by a run of positions where the locally best guess is
+not the globally best one — each choice individually defensible, the
+accumulation fatal. Greedy mistakes rarely matter on average precisely because
+they are rare; the tail is where the rare things all happened at once, and it is
+exactly where compounding shows up. Optimal play buys a locally worse guess now
+to avoid a bad split two turns later, which is what the paper's title means by
+*strategy optimization*, and it is a fundamentally more expensive computation
+than anything in this repo.
+
+One caveat on reading the two bounds together: they optimise different
+objectives, and the strategy attaining one is not generally the strategy
+attaining the other. 5.213 and 7 are two separate targets, not a single
+scoreboard some known policy hits simultaneously.
+
+## The information floor is not the bar
+
+This is also a useful correction to a number this project has been publishing
+since Phase 3. The information-theoretic floor for the 5040 variant --
+log2(5040)/log2(14), assuming every guess splits the space perfectly evenly --
+is **3.230** guesses. The achievable optimum is 5.213.
+
+So the floor understates the real target by more than 60%. It is a true lower
+bound and a nearly useless one, because no single code splits 5040 candidates
+into fourteen equal parts, let alone does so repeatedly. Quoting a solver's
+distance from the floor makes it look far worse than it is: entropy is 2.08
+guesses above the floor and 0.10 above what is actually attainable. Both
+numbers belong in the table, and only the second one is a measure of how well
+the solver plays.
 
 ## What to take from it
 
@@ -99,10 +135,11 @@ strategies while its mean is worse than both, so there is no column in which it
 wins. Whether 7 is optimal for that variant is unknown here; no published bound
 covers it.
 
-On the 5040-code standard variant, where the optimum is known to be 7, every
-greedy strategy lands on 8. The worst-case guarantee minimax offers is real —
-it is much better than the random baseline's 9 — but it is neither exclusive
-nor optimal.
+On the 5040-code standard variant, where both optima are known, every greedy
+strategy lands within 2% of the optimal mean and one full guess above the
+optimal worst case. The worst-case guarantee minimax offers is real — much
+better than the random baseline's 9 — but it is neither exclusive nor optimal,
+and it is not what separates the strategies from each other.
 
 And the practical consequence for the benchmark tables: worst case and mean
 both have to be reported, because a mean-only table makes minimax look strictly
