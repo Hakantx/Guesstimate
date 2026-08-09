@@ -2,17 +2,11 @@
 
 import random
 from abc import ABC, abstractmethod
-from collections import Counter
+from collections.abc import Sequence
 
-from guesstimate.core import (
-    Code,
-    Feedback,
-    Ruleset,
-    all_candidates,
-    filter_candidates,
-    score,
-)
+from guesstimate.core import Code, Feedback, Ruleset, all_candidates
 
+from .partitioner import CandidateSet, CodeIndex, Partitioner, PurePartitioner
 from .protocol import InconsistentFeedbackError
 
 
@@ -39,6 +33,11 @@ class BaseSolver(ABC):
         rng: Source of randomness, injected so benchmarks reproduce. Only
             `RandomSolver` uses it; the other three break ties deterministically
             and ignore it, but they accept it to keep the signature uniform.
+        partitioner: How the solver finds out what a guess does to the
+            candidate set. Defaults to scoring on demand. Pass a matrix-backed
+            one from `guesstimate.data` to make the same strategy fast --
+            solvers never build or load one themselves, which is what keeps
+            this layer free of numpy and of I/O.
     """
 
     #: Whether two runs on the same secret can differ. The three scoring
@@ -53,22 +52,34 @@ class BaseSolver(ABC):
         *,
         restrict_to_candidates: bool = True,
         rng: random.Random | None = None,
+        partitioner: Partitioner | None = None,
     ) -> None:
         self.ruleset = ruleset
         self.restrict_to_candidates = restrict_to_candidates
         self._rng = random.Random() if rng is None else rng
+        self._partitioner = (
+            PurePartitioner(ruleset) if partitioner is None else partitioner
+        )
         self._space = tuple(all_candidates(ruleset))
-        # Position in the full space, used to break ties. This is what "lowest
-        # first" means: alphabet order, not the tuples' own comparison order,
-        # which would sort by character code and diverge the moment a ruleset
-        # uses an alphabet that is not already in ascending order.
-        self._position = {code: index for index, code in enumerate(self._space)}
+        # Everything below the public surface is an index into `_space`. That
+        # ordering is already what "lowest first" means for the tie-break --
+        # alphabet order, not the tuples' own comparison order, which would sort
+        # by character code and diverge the moment an alphabet is not ascending
+        # -- so an index is its own tie-break position and needs no side table.
+        self._universe: CandidateSet = self._partitioner.universe()
+        self._index_of = {code: CodeIndex(i) for i, code in enumerate(self._space)}
+        self._indices: CandidateSet = self._universe
+        self._survivor_set = set(self._indices)
         self._candidates = self._space
-        self._survivor_set = set(self._candidates)
         # How many answers this solver has absorbed. Zero means it is still on
         # its opening move, which is the one turn whose result can be reused
         # across games -- see the opening cache in `partition.py`.
         self._answers = 0
+
+    @property
+    def indices(self) -> CandidateSet:
+        """The surviving candidates as indices, for a caller working in them."""
+        return self._indices
 
     @property
     def candidates(self) -> tuple[Code, ...]:
@@ -84,7 +95,12 @@ class BaseSolver(ABC):
     @property
     def guess_pool(self) -> tuple[Code, ...]:
         """The codes this solver will consider guessing this turn."""
-        return self._candidates if self.restrict_to_candidates else self._space
+        return tuple(self._space[i] for i in self._pool)
+
+    @property
+    def _pool(self) -> CandidateSet:
+        """The same pool as indices, which is what the search actually walks."""
+        return self._indices if self.restrict_to_candidates else self._universe
 
     def guess(self) -> Code:
         """The next code to try. Does not change the solver's state."""
@@ -97,7 +113,9 @@ class BaseSolver(ABC):
             InconsistentFeedbackError: If no candidate survives, which means an
                 earlier answer contradicts this one.
         """
-        survivors = filter_candidates(self._candidates, guess, feedback)
+        survivors = self._partitioner.block(
+            self._index_of[guess], self._indices, feedback
+        )
         if not survivors:
             raise InconsistentFeedbackError(
                 f"no code can answer {feedback} to {''.join(guess)} and still "
@@ -106,11 +124,12 @@ class BaseSolver(ABC):
         # Frozen here, once per answer, rather than copied on every read.
         # `candidates` hands this exact object out, so the snapshot is
         # genuinely immutable and costs nothing per access.
-        self._candidates = tuple(survivors)
+        self._indices = survivors
+        self._candidates = tuple(self._space[i] for i in survivors)
         self._survivor_set = set(survivors)
         self._answers += 1
 
-    def _partition(self, guess: Code) -> list[int]:
+    def _partition(self, guess: CodeIndex) -> Sequence[int]:
         """Sizes of the groups this guess would split the survivors into.
 
         Every candidate produces exactly one feedback for a given guess, so the
@@ -119,10 +138,7 @@ class BaseSolver(ABC):
         feedback produced which group -- which is why the three scoring solvers
         can share this and differ by one line.
         """
-        counts: Counter[Feedback] = Counter(
-            score(candidate, guess) for candidate in self._candidates
-        )
-        return list(counts.values())
+        return self._partitioner.sizes(guess, self._indices)
 
     @abstractmethod
     def _choose(self) -> Code:

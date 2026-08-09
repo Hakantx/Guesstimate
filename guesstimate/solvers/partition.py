@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from guesstimate.core import Code, Ruleset
 
 from .base import BaseSolver
+from .partitioner import CodeIndex
 
 # Opening moves, keyed by what actually determines them.
 #
@@ -85,9 +86,9 @@ class PartitionSolver(BaseSolver, ABC):
         return opening
 
     def _search(self) -> Code:
-        return min(self.guess_pool, key=self._rank)
+        return self._space[min(self._pool, key=self._rank)]
 
-    def _rank(self, guess: Code) -> tuple[float, bool, int]:
+    def _rank(self, guess: CodeIndex) -> tuple[float, bool, int]:
         """The sort key deciding which guess wins. Lower is better throughout.
 
         Three parts, in order of authority:
@@ -99,14 +100,16 @@ class PartitionSolver(BaseSolver, ABC):
            Encoding it the other way round -- True for "is a candidate" --
            silently prefers the guess that cannot win, costs a turn on every
            tie, and breaks no test that only checks the solver eventually wins.
-        3. Position in the candidate space, so the remaining ties resolve in
-           alphabet order rather than by dictionary iteration. Benchmarks have
-           to reproduce exactly, which means no tie may be left to chance.
+        3. The index itself, so the remaining ties resolve in alphabet order
+           rather than by dictionary iteration. Benchmarks have to reproduce
+           exactly, which means no tie may be left to chance. Indices are
+           positions in `all_candidates`, so comparing them *is* comparing
+           alphabet order -- no side table, and nothing to keep in sync.
         """
         return (
             self._cost(self._partition(guess)),
             guess not in self._survivor_set,
-            self._position[guess],
+            guess,
         )
 
     @abstractmethod

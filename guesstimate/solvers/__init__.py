@@ -15,6 +15,7 @@ from .entropy import EntropySolver
 from .expected_size import ExpectedSizeSolver
 from .minimax import MinimaxSolver
 from .partition import PartitionSolver, clear_opening_cache
+from .partitioner import CandidateSet, CodeIndex, Partitioner, PurePartitioner
 from .protocol import InconsistentFeedbackError, Solver
 from .random_solver import RandomSolver
 
@@ -33,11 +34,15 @@ SOLVERS: dict[str, type[BaseSolver]] = {
 __all__ = [
     "SOLVERS",
     "BaseSolver",
+    "CandidateSet",
+    "CodeIndex",
     "EntropySolver",
     "ExpectedSizeSolver",
     "InconsistentFeedbackError",
     "MinimaxSolver",
     "PartitionSolver",
+    "Partitioner",
+    "PurePartitioner",
     "RandomSolver",
     "Solver",
     "clear_opening_cache",
