@@ -139,7 +139,10 @@ class BaseSolver(ABC):
         survivors = self._partitioner.block(
             self._index_of[guess], self._indices, feedback
         )
-        if not survivors:
+        # `len(...) == 0`, not `not survivors`: a CandidateSet may be a numpy
+        # array, whose truthiness is ambiguous and raises rather than being
+        # falsy. Emptiness is the only thing being asked here.
+        if len(survivors) == 0:
             raise InconsistentFeedbackError(
                 f"no code can answer {feedback} to {''.join(guess)} and still "
                 f"match every earlier answer; one of them must be wrong"

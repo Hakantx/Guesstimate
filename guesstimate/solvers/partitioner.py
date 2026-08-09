@@ -54,10 +54,21 @@ class Partitioner(Protocol):
         ...
 
     def sizes(self, guess: CodeIndex, candidates: CandidateSet) -> Sequence[int]:
-        """Block sizes of the partition `guess` induces on `candidates`.
+        """Block sizes of the partition `guess` induces, in ascending order.
 
-        Order carries no meaning -- every strategy here judges a split by the
-        shape of its block sizes, never by which answer produced which block.
+        Which answer produced which block carries no meaning -- every strategy
+        judges a split by the shape of its block sizes alone. The *order* does
+        carry meaning, though, and every implementation must sort.
+
+        Not sorting is a real bug, and a subtle one. `EntropySolver` sums a
+        float per block, and floating-point addition is not associative, so the
+        same multiset of sizes added in two different orders can differ in the
+        last bit. That is enough to flip a tie between two equally good guesses,
+        which makes the solver's choice depend on how its partitioner happened
+        to enumerate blocks. It was caught by the matrix and pure partitioners
+        playing different games from the same position -- both winning, one
+        turn apart.
+
         The sizes sum to `len(candidates)`.
         """
         ...
@@ -99,11 +110,15 @@ class PurePartitioner:
         return [CodeIndex(i) for i in range(len(self._space))]
 
     def sizes(self, guess: CodeIndex, candidates: CandidateSet) -> Sequence[int]:
-        """Score the guess against every candidate and count the answers."""
+        """Score the guess against every candidate and count the answers.
+
+        Sorted, because `Counter` yields blocks in first-seen order and a
+        float cost summed in a different order can differ in the last bit.
+        """
         counts: Counter[Feedback] = Counter(
             score(self._space[index], self._space[guess]) for index in candidates
         )
-        return list(counts.values())
+        return sorted(counts.values())
 
     def block(
         self, guess: CodeIndex, candidates: CandidateSet, feedback: Feedback
