@@ -233,3 +233,102 @@ def test_the_public_indices_stay_plain_ints_behind_the_matrix(tmp_path):
     solver.update(("1", "2", "3"), Feedback(1, 0))
     for index in solver.candidate_indices:
         assert type(index) is int
+
+
+# --- the ceilings ----------------------------------------------------------
+#
+# The matrix is n^2 bytes and n^2/2 scorings. Both ceilings are real and they
+# bind in different places, so both are checked.
+
+
+def test_the_estimate_matches_the_arithmetic():
+    from guesstimate.data import estimate
+
+    costs = estimate(SMALL)
+    assert costs.bytes_needed == SMALL.space_size**2
+    assert costs.build_seconds > 0
+
+
+def test_the_classic_ruleset_is_affordable():
+    from guesstimate.data import estimate
+
+    assert estimate(Ruleset()).affordable
+
+
+def test_time_binds_before_memory_at_the_defaults():
+    # Measured, not assumed: the memory ceiling is reached at n=23,170 and the
+    # time ceiling at n=13,945, so anything big enough to worry about memory is
+    # already too slow to build. 15,120 codes is 229 MB -- comfortably under
+    # the 512 MB ceiling -- and still declined, on time alone.
+    from guesstimate.data import estimate
+
+    costs = estimate(Ruleset(5, "123456789"))
+    assert not costs.too_big
+    assert costs.too_slow
+    assert not costs.affordable
+
+
+def test_memory_is_the_backstop_when_the_time_limit_is_lifted():
+    # Raising the time ceiling to run a build overnight is exactly when a 4 GB
+    # allocation on a two-core laptop needs stopping by something else.
+    from guesstimate.data import estimate
+
+    costs = estimate(
+        Ruleset(4, "0123456789ABCDEF", allow_repeats=True), max_build_seconds=1e9
+    )
+    assert costs.too_big
+    assert not costs.too_slow
+    assert not costs.affordable
+
+
+def test_a_tight_time_ceiling_declines_an_affordable_size():
+    from guesstimate.data import estimate
+
+    costs = estimate(Ruleset(), max_build_seconds=0.0001)
+    assert not costs.too_big and costs.too_slow and not costs.affordable
+
+
+def test_the_reason_is_reported_not_just_the_verdict():
+    from guesstimate.data import estimate
+
+    described = estimate(Ruleset(4, "0123456789ABCDEF", allow_repeats=True)).describe()
+    assert "declined" in described and "ceiling" in described
+
+
+def test_an_affordable_ruleset_gets_the_matrix(tmp_path):
+    from guesstimate.data import MatrixPartitioner, choose_partitioner
+
+    partitioner, name = choose_partitioner(SMALL, cache_dir=tmp_path)
+    assert name == "matrix"
+    assert isinstance(partitioner, MatrixPartitioner)
+
+
+def test_an_unaffordable_ruleset_falls_back_to_pure(tmp_path):
+    from guesstimate.data import choose_partitioner
+
+    partitioner, name = choose_partitioner(SMALL, cache_dir=tmp_path, max_bytes=10)
+    assert name == "pure"
+    assert isinstance(partitioner, PurePartitioner)
+
+
+def test_the_fallback_still_plays_the_same_game(tmp_path):
+    # The cap changes speed, never answers. A sweep that silently fell back
+    # mid-run must still produce comparable guess counts.
+    from guesstimate.data import choose_partitioner
+    from guesstimate.solvers import clear_opening_cache
+
+    fast, _ = choose_partitioner(SMALL, cache_dir=tmp_path)
+    slow, _ = choose_partitioner(SMALL, cache_dir=tmp_path, max_bytes=10)
+    secret = all_candidates(SMALL)[7]
+    clear_opening_cache()
+    first = _transcript(SOLVERS["entropy"], SMALL, secret, fast)
+    clear_opening_cache()
+    second = _transcript(SOLVERS["entropy"], SMALL, secret, slow)
+    assert first == second
+
+
+def test_the_scoring_rate_is_measured_once():
+    from guesstimate.data import scoring_rate
+
+    assert scoring_rate() == scoring_rate()
+    assert 0 < scoring_rate() < 1e-3

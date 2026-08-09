@@ -55,7 +55,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "surviving set. Roughly 4.6x slower per game."
         ),
     )
-    parser.add_argument("--baseline", default="random/restricted")
+    parser.add_argument("--baseline", default=None)
+    parser.add_argument(
+        "--engine",
+        choices=["pure", "matrix", "auto"],
+        default="auto",
+        help=(
+            "which partitioner to time against. 'auto' takes the matrix when "
+            "the ruleset can afford one and falls back to on-demand scoring "
+            "when it cannot; the choice is recorded in every config name."
+        ),
+    )
     parser.add_argument(
         "--baseline-repeats",
         type=int,
@@ -83,13 +93,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def configurations(names: list[str], unrestricted: bool) -> list[Config]:
+def resolve_engine(requested: str, ruleset: Ruleset) -> str:
+    """Pick the partitioner, reporting the estimate before any long build."""
+    if requested != "auto":
+        return requested
+    from guesstimate.data import estimate
+
+    costs = estimate(ruleset)
+    print(costs.describe(), flush=True)
+    return "matrix" if costs.affordable else "pure"
+
+
+def configurations(
+    names: list[str], unrestricted: bool, engine: str = "pure"
+) -> list[Config]:
     """Expand solver names into the configurations to run."""
-    configs = [Config(name, True) for name in names]
+    configs = [Config(name, True, engine) for name in names]
     if unrestricted:
         # RandomSolver documents that it ignores the flag, so running it
         # unrestricted would duplicate a row rather than measure anything.
-        configs += [Config(n, False) for n in names if n != "random"]
+        configs += [Config(n, False, engine) for n in names if n != "random"]
     return configs
 
 
@@ -111,7 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         store = RecordStore(args.out / "games.jsonl", provenance)
 
-    configs = configurations(args.solvers, args.unrestricted)
+    engine = resolve_engine(args.engine, ruleset)
+    configs = configurations(args.solvers, args.unrestricted, engine)
     print(
         f"{len(configs)} configurations x {len(sample)} secrets, "
         f"seed {args.seed}, {ruleset.space_size}-code ruleset",
@@ -154,7 +178,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     floor = information_floor(ruleset)
-    baseline = args.baseline if args.baseline in guess_counts else configs[0].name
+    default_baseline = f"random/restricted/{engine}"
+    wanted = args.baseline or default_baseline
+    baseline = wanted if wanted in guess_counts else configs[0].name
     report = build_report(
         provenance,
         ruleset,

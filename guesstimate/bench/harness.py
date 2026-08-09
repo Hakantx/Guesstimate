@@ -8,9 +8,28 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from guesstimate.core import Code, Ruleset, all_candidates, score
-from guesstimate.solvers import SOLVERS, clear_opening_cache
+from guesstimate.solvers import (
+    SOLVERS,
+    Partitioner,
+    PurePartitioner,
+    clear_opening_cache,
+)
 
 from .records import GameRecord, RecordStore
+
+
+def _partitioner_for(config: Config, ruleset: Ruleset) -> Partitioner:
+    """Build the partitioner a config names.
+
+    Imported lazily so that `guesstimate.bench` does not drag numpy in for a
+    run that never asks for a matrix.
+    """
+    if config.engine == "pure":
+        return PurePartitioner(ruleset)
+    from guesstimate.data import MatrixPartitioner
+
+    return MatrixPartitioner(ruleset)
+
 
 # Mixed into the run seed so each game reseeds independently of the ones before
 # it. Any odd constant does; this one is prime and large enough that adjacent
@@ -21,16 +40,25 @@ _REPEAT_STRIDE = 7_919
 
 @dataclass(frozen=True)
 class Config:
-    """One solver in one guessing mode."""
+    """One solver, in one guessing mode, on one partitioner."""
 
     solver: str
     restrict_to_candidates: bool
+    engine: str = "pure"
 
     @property
     def name(self) -> str:
-        """Stable id used in records, tables, and chart legends."""
+        """Stable id used in records, tables, and chart legends.
+
+        The engine is part of the identity, always and unconditionally. Guess
+        counts are identical across engines by construction, but timings are
+        not, and a table with some rows measured against a matrix and some
+        against on-demand scoring -- with nothing saying which -- is worse than
+        no table. Including it also keeps the resume key honest, so a matrix run
+        cannot silently continue a pure one's records.
+        """
         mode = "restricted" if self.restrict_to_candidates else "unrestricted"
-        return f"{self.solver}/{mode}"
+        return f"{self.solver}/{mode}/{self.engine}"
 
 
 @dataclass(frozen=True)
@@ -68,6 +96,7 @@ def play_game(
     index: int,
     seed: int,
     repeat: int = 0,
+    partitioner: Partitioner | None = None,
 ) -> GameRecord:
     """Play one game and record what it cost.
 
@@ -80,6 +109,7 @@ def play_game(
         ruleset,
         restrict_to_candidates=config.restrict_to_candidates,
         rng=random.Random(seed * _INDEX_STRIDE + index * _REPEAT_STRIDE + repeat),
+        partitioner=partitioner,
     )
 
     turn_seconds: list[float] = []
@@ -108,7 +138,9 @@ def play_game(
     )
 
 
-def measure_cold_open(config: Config, ruleset: Ruleset) -> float:
+def measure_cold_open(
+    config: Config, ruleset: Ruleset, partitioner: Partitioner | None = None
+) -> float:
     """Time the opening search on an empty cache, then leave the cache warm.
 
     This is the number Phase 5 will halve, and it is reported on its own. It is
@@ -121,6 +153,7 @@ def measure_cold_open(config: Config, ruleset: Ruleset) -> float:
         ruleset,
         restrict_to_candidates=config.restrict_to_candidates,
         rng=random.Random(0),
+        partitioner=partitioner,
     )
     started = time.perf_counter()
     solver.guess()
@@ -149,7 +182,8 @@ def run_config(
     single draw from a distribution, which is not the quantity anyone wants to
     compare a strategy against.
     """
-    cold_open = measure_cold_open(config, ruleset)
+    partitioner = _partitioner_for(config, ruleset)
+    cold_open = measure_cold_open(config, ruleset, partitioner)
     per_secret = repeats if SOLVERS[config.solver].stochastic else 1
 
     already = store.done(config.name) if store else set()
@@ -171,7 +205,9 @@ def run_config(
                 records.append(existing[(index, repeat)])
                 continue
 
-            record = play_game(config, ruleset, secret, index, seed, repeat)
+            record = play_game(
+                config, ruleset, secret, index, seed, repeat, partitioner
+            )
             if store:
                 store.append(record)
             records.append(record)
