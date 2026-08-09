@@ -150,10 +150,42 @@ happens to sit below 5.213 is luck rather than validity.
 What survives is the weaker claim. Entropy of a partition into at most `k`
 blocks is at most log2(k) at every stage of every game, so log2(N)/log2(k) is
 sound, and it is sound precisely because it does not try to use anything about
-a particular position. Getting a genuinely tighter bound needs a different
-argument — one that accounts for the endgame, where the candidate set is small,
-the information available per guess is nearly irrelevant, and what actually
-costs turns is that the last guess has to name the code exactly.
+a particular position.
+
+### A tighter floor that does work
+
+The repair is to stop counting bits and start counting trees.
+
+A strategy is a decision tree: each node is a guess, each edge an answer.
+Exactly one answer — all bulls — ends the game, so every node has at most
+`k - 1` edges that continue it. A secret solved on guess `j` lies at the end of
+a path with `j - 1` continuing edges, and there are at most `(k - 1) ** (j - 1)`
+such paths. So no strategy, however clever, can solve more than that many
+secrets on guess `j`:
+
+| Depth | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| Capacity | 1 | 13 | 169 | 2,197 | 28,561 |
+
+The friendliest possible arrangement puts secrets as shallowly as the capacities
+allow. For the 5040 variant, depths 1 to 4 hold 1 + 13 + 169 + 2197 = 2,380,
+leaving 2,660 at depth 5 or deeper:
+
+    (1x1 + 2x13 + 3x169 + 4x2197 + 5x2660) / 5040  =  22,622 / 5040  =  4.4885
+
+**No strategy can average fewer than 4.489 guesses.** That closes 63% of the
+distance between the entropy floor (3.230) and the attainable optimum (5.213),
+and it is valid where the entropy tightening was not — for exactly the reason
+the entropy one failed. This argument never asks what any particular guess does
+to any particular position. It only counts the shape of the tree, so no
+mid-game position can behave unlike the opening and break it.
+
+Against it, the greedy solvers look better than the old floor suggested:
+entropy is 2.08 guesses above the entropy floor but only 0.83 above the counting
+floor, and 0.10 above what is actually attainable.
+
+Both floors are now reported side by side in every benchmark table. Neither is
+wrong; one is nearly useless.
 
 ## What to take from it
 

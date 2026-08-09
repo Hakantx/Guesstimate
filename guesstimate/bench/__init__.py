@@ -28,6 +28,7 @@ from .records import GameRecord, RecordStore
 from .stats import (
     PairedDifference,
     Summary,
+    counting_floor,
     information_floor,
     paired_difference,
     per_secret_guesses,
@@ -42,6 +43,7 @@ __all__ = [
     "RecordStore",
     "RunResult",
     "Summary",
+    "counting_floor",
     "draw_sample",
     "information_floor",
     "measure_cold_open",

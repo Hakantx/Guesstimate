@@ -130,6 +130,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.report_only:
         store = RecordStore.open_for_reading(args.out / "games.jsonl")
         provenance = store.provenance
+        # The run's own ruleset, not whatever the flags happen to say. A stored
+        # run already records what it played; re-deriving it from CLI defaults
+        # meant re-rendering a report required retyping the original flags
+        # exactly, and getting them wrong produced either a crash or, worse, a
+        # correct-looking report built against the wrong space.
+        ruleset = Ruleset(
+            length=provenance.ruleset["length"],
+            alphabet=provenance.ruleset["alphabet"],
+            allow_repeats=provenance.ruleset["allow_repeats"],
+        )
         sample = draw_sample(ruleset, provenance.sample_size, provenance.seed)
     else:
         store = RecordStore(args.out / "games.jsonl", provenance)

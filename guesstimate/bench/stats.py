@@ -186,6 +186,54 @@ def _collapse_curve(records: Sequence[GameRecord]) -> tuple[float, ...]:
     return tuple(curve)
 
 
+def counting_floor(ruleset: Ruleset) -> float:
+    """A tighter lower bound on mean guesses, from counting alone.
+
+    Think of a strategy as a decision tree: each node is a guess, each edge an
+    answer. Exactly one answer -- all bulls -- ends the game, so every node has
+    at most `outcomes - 1` edges that continue it. A secret solved on guess `j`
+    sits at the end of a path with `j - 1` continuing edges, and there are at
+    most `(outcomes - 1) ** (j - 1)` such paths. That caps how many secrets any
+    strategy can possibly solve by guess `j`:
+
+        depth 1:     1 secret        depth 4:    2,197
+        depth 2:    13               depth 5:   28,561
+        depth 3:   169
+
+    The best case is packing secrets as shallowly as those caps allow. For the
+    5040-secret variant, depths 1 to 4 hold 1 + 13 + 169 + 2197 = 2,380, leaving
+    2,660 to sit at depth 5 or deeper, so the mean cannot beat
+    (1 + 26 + 507 + 8788 + 13300) / 5040 = 4.4885 guesses.
+
+    This is pure counting. Unlike an information argument built on how much
+    entropy a particular guess extracts, it uses nothing about any position, so
+    it cannot be invalidated by a mid-game position that behaves unlike the
+    opening -- which is exactly what sank the tighter entropy bound that was
+    tried first (see `docs/notes/minimax-mean-vs-worst.md`).
+
+    It is much tighter than `information_floor`: 4.489 against 3.230 on the
+    5040 variant, closing 63% of the distance to the attainable 5.213.
+    """
+    total_secrets = ruleset.space_size
+    if total_secrets <= 1:
+        return 1.0
+
+    branches = len(feedback_space(ruleset)) - 1
+    if branches < 1:
+        # One outcome means no guess distinguishes anything.
+        return float("inf")
+
+    remaining = total_secrets
+    weighted = 0
+    depth = 1
+    while remaining > 0:
+        take = min(remaining, branches ** (depth - 1))
+        weighted += depth * take
+        remaining -= take
+        depth += 1
+    return weighted / total_secrets
+
+
 def information_floor(ruleset: Ruleset) -> float:
     """The fewest guesses any strategy could average, in principle.
 
@@ -201,8 +249,9 @@ def information_floor(ruleset: Ruleset) -> float:
     solvers look further from optimal than they are.
 
     No real strategy reaches this bound -- it assumes every guess splits the
-    space perfectly evenly, which no single code does. The gap between it and
-    the best solver is the interesting quantity, not the bound itself.
+    space perfectly evenly, which no single code does. It is sound but very
+    loose; `counting_floor` is a much better bound obtained by counting decision
+    trees rather than bits, and both are reported.
     """
     if ruleset.space_size <= 1:
         return 1.0
