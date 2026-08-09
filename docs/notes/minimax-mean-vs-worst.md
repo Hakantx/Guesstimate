@@ -126,6 +126,35 @@ guesses above the floor and 0.10 above what is actually attainable. Both
 numbers belong in the table, and only the second one is a measure of how well
 the solver plays.
 
+### A tighter floor that does not work
+
+The obvious repair is to replace the theoretical cap with a measured one. No
+guess actually extracts log2(14) = 3.807 bits on the opening, because no code
+splits 5040 candidates evenly; the best first guess extracts **2.771** bits.
+Substituting that gives log2(5040)/2.771 = **4.438**, which closes 62% of the
+distance to the achievable 5.213 and looks like a much better bound.
+
+It is not a bound at all. The substitution is only valid if no guess anywhere in
+the game extracts more than the best opening guess does, and that is false. The
+reason the opening extracts so little is that 5040 candidates cannot be carved
+evenly into fourteen groups — but thirty candidates often can be, and a guess
+that splits thirty survivors into fourteen near-equal groups extracts close to
+the full 3.807 bits.
+
+Measured over 149 mid-game positions from real games: **101 of them offered more
+information than the best opening guess**, by up to 0.68 bits. Information per
+guess goes *up* as the candidate set shrinks, not down. A floor built on the
+first-turn maximum is therefore not conservative, and the fact that 4.438 still
+happens to sit below 5.213 is luck rather than validity.
+
+What survives is the weaker claim. Entropy of a partition into at most `k`
+blocks is at most log2(k) at every stage of every game, so log2(N)/log2(k) is
+sound, and it is sound precisely because it does not try to use anything about
+a particular position. Getting a genuinely tighter bound needs a different
+argument — one that accounts for the endgame, where the candidate set is small,
+the information available per guess is nearly irrelevant, and what actually
+costs turns is that the last guess has to name the code exactly.
+
 ## What to take from it
 
 The honest summary has three parts, and the variant has to be attached to each.

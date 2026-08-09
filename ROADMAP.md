@@ -229,9 +229,25 @@ so hex mode and length-6 mode get their own files instead of silently reusing
 the wrong one. Solvers take the matrix as a constructor argument and never load
 it themselves. Nothing builds at import time.
 
-Then build the **opening book**: the optimal first guess is fixed, and there
-are only 14 possible responses to it, so the best second guess for each is
-precomputable. Ship it as JSON. The first two moves become instant lookups.
+~~Then build the **opening book**~~ — **skipped deliberately, not forgotten.**
+
+The plan was to precompute the fixed opening and a best second guess for each of
+the 14 replies, shipped as JSON, making the first two moves instant lookups. The
+matrix removed the problem it was meant to solve. A full 3024-secret minimax
+sweep now takes 37 seconds against 6329 before, and the in-memory opening cache
+from Phase 2 still covers turn one for free within a process.
+
+What a book would add on top is a lookup for turn two, against a turn two that
+now costs a few milliseconds. In exchange it wants a build step, a JSON schema,
+a cache-invalidation story keyed to the ruleset, and a second source of truth
+for something the solvers already compute correctly — all to save time that is
+no longer being spent.
+
+That may change. If Phase 7's animation needs the first two moves before a
+frame is drawn, or if the WASM build in Phase 11 cannot afford a 9 MB matrix in
+the browser, a book becomes the right shape again and the reasoning above is
+what to revisit. Until there is a measurement showing it buys something, it is
+complexity without evidence.
 
 Profile before and after and record both numbers. Write a README section on it:
 what the bottleneck was, why the matrix fixes it, what it costs in memory, and
@@ -277,7 +293,7 @@ for the current turn. Written up in `docs/notes/minimax-mean-vs-worst.md`.
 
 **Done when:** a full minimax benchmark runs in seconds, with before/after
 timings committed, and unrestricted minimax has been swept over all 3024
-secrets with its worst case published.
+secrets with its worst case published. *(Done: 37s, 171x, worst case 7.)*
 
 ---
 
