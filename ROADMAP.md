@@ -206,6 +206,11 @@ and the table is in the README.
 
 Record a terminal GIF for the README.
 
+**Open item, deferred.** The recording is not done. `asciinema` captured a
+6-row terminal and `svg-term` rejected the resulting file, so the demo will be
+a screen-recorded `.mov` instead. Everything else in this phase is finished and
+merged; this is the only thing outstanding, and it blocks nothing.
+
 **Done when:** `uvx guesstimate` plays a full game.
 
 ---
