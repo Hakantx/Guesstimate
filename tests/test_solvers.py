@@ -532,3 +532,79 @@ def test_candidates_is_an_immutable_snapshot(solver_class, case):
     # replaced the tuple rather than editing one the caller was pointing at.
     assert len(snapshot) == ruleset.space_size
     assert len(solver.candidates) <= len(snapshot)
+
+
+# --- candidate indices -----------------------------------------------------
+#
+# The index ordering is the grid ordering in DESIGN.md, so the API and the
+# visualisation want positions rather than symbols. Exposing them here keeps
+# the code-to-position mapping in one place; a caller handed only `Code` tuples
+# would have to rebuild that table, which is the side table the partitioner
+# refactor removed.
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_candidate_indices_start_as_the_whole_space(solver_class):
+    solver = solver_class(SMALL, rng=random.Random(0))
+    assert solver.candidate_indices == tuple(range(SMALL.space_size))
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_candidate_indices_address_the_same_codes(solver_class):
+    # The invariant the grid rests on: index i is all_candidates()[i].
+    space = all_candidates(SMALL)
+    solver = solver_class(SMALL, rng=random.Random(0))
+    solver.update(("1", "2", "3"), Feedback(1, 0))
+    assert tuple(space[i] for i in solver.candidate_indices) == solver.candidates
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_candidate_indices_are_plain_ints(solver_class):
+    # They cross a JSON boundary in Phase 6, and a numpy scalar does not
+    # serialise. This is what stops the matrix partitioner leaking np.intp out.
+    solver = solver_class(SMALL, rng=random.Random(0))
+    solver.update(("1", "2", "3"), Feedback(1, 0))
+    for index in solver.candidate_indices:
+        assert type(index) is int
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_candidate_indices_are_an_immutable_cached_snapshot(solver_class):
+    solver = solver_class(SMALL, rng=random.Random(0))
+    snapshot = solver.candidate_indices
+    assert isinstance(snapshot, tuple)
+    assert solver.candidate_indices is snapshot
+
+    solver.update(("1", "2", "3"), Feedback(1, 0))
+    assert len(snapshot) == SMALL.space_size  # the old view is untouched
+    assert len(solver.candidate_indices) < SMALL.space_size
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_the_grid_path_never_materialises_codes(solver_class):
+    # The point of making `candidates` lazy: a caller that only wants indices
+    # must not pay to turn a few thousand of them back into symbols.
+    solver = solver_class(SMALL, rng=random.Random(0))
+    solver.update(("1", "2", "3"), Feedback(1, 0))
+
+    assert solver._code_snapshot is None
+    assert solver.candidate_indices is not None
+    assert solver._code_snapshot is None, "reading indices built the Code tuple"
+
+    assert solver.candidates is not None
+    assert solver._code_snapshot is not None
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_neither_view_is_built_until_it_is_asked_for(solver_class):
+    solver = solver_class(SMALL, rng=random.Random(0))
+    solver.update(("1", "2", "3"), Feedback(1, 0))
+    assert solver._index_snapshot is None and solver._code_snapshot is None
+
+
+@pytest.mark.parametrize("solver_class", SOLVER_CLASSES, ids=SOLVER_IDS)
+def test_the_protocol_declares_candidate_indices(solver_class):
+    assert isinstance(
+        inspect.getattr_static(solver_class, "candidate_indices"), property
+    )
+    assert hasattr(Solver, "candidate_indices")

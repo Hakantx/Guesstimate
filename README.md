@@ -34,8 +34,8 @@ never modified.
 | 1 | The engine | done |
 | 2 | Solvers | done |
 | 3 | Benchmark suite | done |
-| 4 | CLI | in progress |
-| 5 | Make it fast | |
+| 4 | CLI | done |
+| 5 | Make it fast | done |
 | 6 | API and game server | |
 | 7 | The web app | |
 | 8 | Game review | |
@@ -60,65 +60,105 @@ Individual targets: `make lint`, `make fmt`, `make types`, `make test`,
 
 ## Benchmarks
 
-**Playing well is worth about a sixth of a guess, and that holds on every
-ruleset tested — including the classic game.**
+### Checked against published optima
 
-Entropy against a random-consistent baseline, 300 paired secrets each, five
-rulesets chosen to hold space size roughly constant while trading alphabet size
-against code length:
+The standard variant of this game — four positions, digits 0-9, no repeats,
+5040 secrets — has two proved bounds, one for each thing a solver could be
+optimising. Every secret played by every solver, against both:
 
-| Ruleset | Codes | Alphabet | Outcomes | Floor | Random | Entropy | Lead | 95% CI |
-|---|---|---|---|---|---|---|---|---|
-| 5 over `1234`, repeats | 1024 | 4 | 20 | 2.31 | 4.151 | 3.893 | +0.258 | [+0.173, +0.343] |
-| 10 symbols, length 3, repeats | 1000 | 10 | 9 | 3.14 | 5.855 | 5.650 | +0.205 | [+0.030, +0.379] |
-| 5 over `12345`, repeats | 3125 | 5 | 20 | 2.69 | 4.643 | 4.447 | +0.197 | [+0.117, +0.276] |
-| 4 over `123456`, repeats | 1296 | 6 | 14 | 2.72 | 4.675 | 4.503 | +0.172 | [+0.076, +0.268] |
-| **classic** 4 over `1-9` | 3024 | 9 | 14 | 3.04 | 5.137 | 4.993 | +0.143 | [+0.036, +0.250] |
+| Solver | Mean | vs optimal 5.213 | Worst | vs optimal 7 |
+|---|---|---|---|---|
+| entropy | 5.314 | +0.101 (**+1.9%**) | 8 | +1 (**+14%**) |
+| expected-size | 5.319 | +0.106 (+2.0%) | 8 | +1 (+14%) |
+| minimax | 5.354 | +0.141 (+2.7%) | 8 | +1 (+14%) |
+| random | 5.458 | +0.245 (+4.7%) | 9 | +2 (+29%) |
 
-<sub>Seed 20260805. Baseline averaged over 5 seeds per secret. Every interval
-excludes zero.</sub>
+<sub>All 5040 secrets, seed 20260805. Optimal mean 5.213 (Tanaka, 1996);
+optimal worst case 7 guesses, necessary and sufficient (Chen, Lin and Nguyen,
+*Strategy optimization for deductive games*, EJOR). The two bounds optimise
+different objectives and are not claimed to be attainable by one strategy.</sub>
 
-Every solver beats the baseline, everywhere, by between a seventh and a quarter
-of a guess. Small, and real.
+**Greedy play is within 2% of optimal on average and a full guess off at the
+tail.** Every solver here is greedy: it picks whatever guess splits the current
+candidate set best and never considers the position that leaves behind. The
+bounds come from optimising a whole game tree, which can mean playing a locally
+worse guess now to avoid a bad split two turns later.
 
-### What drives the size of the lead
+That gap has the shape local optimisation predicts. A greedy choice is a small
+mistake most of the time, and small mistakes wash out over five thousand games —
+hence 2% on the mean. The worst case averages nothing: it is the single deepest
+branch, reached by a run of positions where the locally best guess was not the
+globally best one, each choice defensible and the accumulation fatal. Greedy
+mistakes rarely matter on average precisely because they are rare, and the tail
+is where the rare things all happened at once.
 
-Nothing that could be isolated. Correlations across the five rulesets are
-weak — alphabet size −0.55, space size −0.57, feedback outcomes +0.43, the
-information floor −0.68 — and with five points none of that is worth reading;
-significance at n=5 would need roughly ±0.88.
+Worth noting what this does to the information-theoretic floor, which this
+project reports and which is a much weaker bound than it looks:
+log2(5040)/log2(14) is **3.230** guesses, against an achievable 5.213. The floor
+understates the real target by over 60%, because no single code splits 5040
+candidates into fourteen equal parts, let alone repeatedly.
 
-More decisively, **every pair of confidence intervals overlaps**. The leads
-range across 0.115 guesses while a single estimate's half-width is 0.108, so
-there is no demonstrated difference between any two rulesets here, let alone a
-trend. ![lead against three predictors](docs/benchmarks/grid-predictors.png)
+### Strategy barely matters on the default ruleset
 
-Separating these would need either far more secrets per ruleset or far more
-rulesets along one axis with the others pinned. That is a real experiment, not
-a bigger version of this one.
+The project's default excludes zero, giving 3024 secrets. There, four solvers
+ranging from "pick any candidate at random" to full minimax land within a
+quarter of a guess of each other:
 
-### A result this replaced
+| Solver | Mean | Worst |
+|---|---|---|
+| entropy | 5.008 | 7 |
+| expected-size | 5.011 | 7 |
+| minimax | 5.044 | 7 |
+| random | 5.161 | 9 |
 
-An earlier reading of two rulesets said strategy was "irrelevant on the classic
-game and starts to matter on information-poor rulesets." The grid does not
-support it. On the classic game at 100 secrets with a single-seed baseline the
-lead measured +0.150 with an interval of [−0.112, +0.412] — not significant, and
-read as an absence of effect. At 300 secrets with the baseline averaged over
-five seeds it measures +0.143, interval [+0.036, +0.250], significant.
+<sub>All 3024 secrets, seed 20260805. No published bound covers this variant.</sub>
 
-The effect barely moved. The measurement got sharper. What looked like a
-finding about the classic game was a statement about the sample size and the
-noise in the baseline, and the honest lesson is that a non-significant result at
-n=100 is not evidence of no effect — it is a wide interval, and it should be
-reported as one rather than converted into a story.
+3024 candidates against 14 possible answers collapse fast enough that almost any
+consistent guess is nearly as good as the best one. Move to a ruleset where a
+guess carries less information — 5 positions over 4 symbols with repeats, 1024
+codes — and the same solvers separate cleanly, all three strategies beating the
+baseline at 95% confidence. Details in
+[`docs/notes/`](docs/notes/minimax-mean-vs-worst.md).
+
+Minimax is worth a specific note: it ties on worst case and loses on mean, on
+both variants, so there is no column in which it wins. The guarantee it offers
+is real but not exclusive.
+
+## Making it fast
+
+The solvers are naive by construction — every guess scored against every
+surviving candidate, every turn — so that the optimisation could be measured
+honestly against them. Phase 5 precomputes the full feedback matrix once and
+indexes it instead.
+
+| | Naive | Matrix | |
+|---|---|---|---|
+| Opening move | 58.01s | 0.08s | **748x** |
+| Full 3024-secret minimax sweep | 6329s | 37s | **171x** |
+| Full sweep, expected-size | 5772s | 39s | 148x |
+
+The opening is the headline. Turn one scores all 3024 guesses against all 3024
+candidates while turn two works on the couple of hundred that survived, so it
+was 99.5% of a naive game's cost and is now effectively free. The whole-sweep
+figure is smaller only because what remains is the leftovers.
+
+Every guess count is byte-identical between the two engines across all 3024
+games per solver — the matrix changes speed and nothing else, and a
+turn-by-turn equivalence test enforces that rather than merely comparing final
+answers. It caught two real bugs doing so, one of which is
+[the best finding in the project](docs/notes/float-associativity-tiebreak.md).
+
+The matrix is n² bytes and n²/2 scorings, capped on both. Measured at 6.2µs per
+scored pair, time binds first for every ruleset that fits in memory at all, so
+the memory ceiling is a backstop rather than a co-equal gate.
 
 ### Running it
 
 ```sh
 make bench                          # 300 secrets, every solver
-make bench ARGS="--sample 50"       # quicker
-make bench ARGS="--unrestricted"    # both guessing modes, ~5x slower
-make bench ARGS="--full"            # every secret; ~108 min per solver
+make bench ARGS="--full"            # every secret
+make bench ARGS="--unrestricted"    # both guessing modes
+make bench ARGS="--engine pure"     # time the naive path
 make bench ARGS="--report-only"     # re-render tables from an existing run
 ```
 
@@ -130,12 +170,11 @@ things the harness insists on:
   means. Between two strategies that removes most of the variance; against the
   random baseline it removes almost none, for reasons worth reading in
   [`docs/notes/paired-sampling.md`](docs/notes/paired-sampling.md).
-- **Split timings.** The opening move costs ~50s on the classic ruleset and
-  every game after it ~2s, so the two are reported separately rather than
-  averaged into a per-game figure that describes neither.
+- **Split timings.** The opening move and the games after it are reported
+  separately rather than averaged into a per-game figure describing neither.
 - **Provenance.** Every report carries the commit, machine, Python version,
-  ruleset, sample size, and seed that produced it. Runs are resumable and refuse
-  to append to a file written by a different run.
+  ruleset, sample size, seed, and engine that produced it. Runs are resumable
+  and refuse to append to a file written by a different run.
 
 ## License
 

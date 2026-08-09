@@ -388,7 +388,7 @@ def test_the_report_carries_its_provenance():
         summaries,
         counts,
         information_floor(SMALL),
-        "random/restricted",
+        "random/restricted/pure",
     )
     # A table with no provenance is uninterpretable later; these are the facts
     # that make a number traceable to the run that produced it.
@@ -416,7 +416,7 @@ def test_charts_are_written(tmp_path):
     summaries = [summarise(r) for r in results.values()]
     counts = {k: per_secret_guesses(r.records) for k, r in results.items()}
     written = write_charts(
-        summaries, counts, "random/restricted", information_floor(SMALL), tmp_path
+        summaries, counts, "random/restricted/pure", information_floor(SMALL), tmp_path
     )
     assert len(written) == 4
     for path in written:
@@ -434,7 +434,7 @@ def test_the_cli_parses_the_documented_flags():
     # Random ignores the flag, so an unrestricted row for it would be a
     # duplicate rather than a measurement.
     assert "random/unrestricted" not in names
-    assert "entropy/unrestricted" in names
+    assert "entropy/unrestricted/pure" in names
 
 
 # --- the dirty flag --------------------------------------------------------
@@ -488,3 +488,50 @@ def test_capture_without_an_output_dir_counts_everything(monkeypatch):
         module, "_git", lambda *a: "?? anything" if a[0] == "status" else "/repo"
     )
     assert module._tree_is_dirty(None) is True
+
+
+# --- the engine is part of a run's identity --------------------------------
+
+
+def test_the_engine_is_in_every_config_name():
+    from guesstimate.bench import Config
+
+    assert Config("entropy", True, "matrix").name == "entropy/restricted/matrix"
+    assert Config("entropy", True, "pure").name == "entropy/restricted/pure"
+
+
+def test_two_engines_are_different_configurations():
+    # Guess counts are identical across engines by construction; timings are
+    # not. Sharing a name would let a matrix run resume a pure one's records
+    # and produce a timing table describing neither.
+    from guesstimate.bench import Config
+
+    assert (
+        Config("minimax", True, "pure").name != Config("minimax", True, "matrix").name
+    )
+
+
+def test_the_store_will_not_resume_across_engines(tmp_path):
+    from guesstimate.bench import Config, RecordStore, draw_sample, run_config
+
+    provenance = Provenance.capture(SMALL, sample_size=3, seed=1)
+    sample = draw_sample(SMALL, size=3, seed=1)
+    store = RecordStore(tmp_path / "g.jsonl", provenance)
+
+    run_config(Config("entropy", True, "pure"), SMALL, sample, seed=1, store=store)
+    done_pure = store.done("entropy/restricted/pure")
+    assert len(done_pure) == 3
+    assert store.done("entropy/restricted/matrix") == set()
+
+
+def test_auto_declines_the_matrix_for_an_unaffordable_ruleset():
+    from guesstimate.bench.__main__ import resolve_engine
+
+    assert resolve_engine("auto", Ruleset(4, "0123456789ABCDEF")) == "pure"
+    assert resolve_engine("auto", Ruleset()) == "matrix"
+
+
+def test_an_explicit_engine_is_not_second_guessed():
+    from guesstimate.bench.__main__ import resolve_engine
+
+    assert resolve_engine("pure", Ruleset()) == "pure"

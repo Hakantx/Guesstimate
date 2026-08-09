@@ -30,15 +30,25 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
 
 ## Hard rules
 
-1. **The core engine has no I/O.** Nothing in `guesstimate/core/` or
-   `guesstimate/solvers/` may call `input()`, `print()`, touch the filesystem,
-   or import anything web-related. Those layers are pure functions over data.
-   Everything else depends on them; they depend on nothing.
+1. **The core engine has no I/O, and no numpy.** Nothing in `guesstimate/core/`
+   or `guesstimate/solvers/` may call `input()`, `print()`, touch the
+   filesystem, or import anything web-related. Those layers are pure functions
+   over data. Everything else depends on them; they depend on nothing.
+
+   numpy is banned there too, and for a different reason: it is the one import
+   that would quietly break the TypeScript port (rule 9). Anything wanting
+   vectorised work goes behind a `Partitioner` implemented in
+   `guesstimate/data/`.
 
 2. **Every solver implements the same protocol.** One class, two methods:
    `guess()` returns the next guess, `update(guess, feedback)` narrows the
    candidate set. Adding a fifth strategy must not require touching the API,
    the UI, or any other solver.
+
+   Construction is uniform too: `(ruleset, *, restrict_to_candidates, rng,
+   partitioner)`. The `partitioner` is how a solver asks what a guess would do
+   to the candidate set, and swapping it is how the same strategy gets fast
+   without a second implementation of the strategy.
 
 3. **The engine is generic from day one.** Length, digit alphabet, repeats
    allowed — all parameters, never hardcoded. `Ruleset.alphabet` is the single
@@ -81,6 +91,13 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
    fine — they are twenty lines of TypeScript each. numpy in `core/` is not,
    which is another reason the matrix lives in `data/`. This constrains the
    engine only; everything above it can be as Pythonic as it likes.
+
+   The boundary is now a specific object rather than a vague instruction:
+   **`PurePartitioner` is what gets ported.** It is the reference
+   implementation, the oracle the matrix-backed one is tested against, and the
+   TypeScript target, all the same code. If something cannot be expressed
+   there, it belongs behind the `Partitioner` interface in `data/`, not in
+   `solvers/`.
 
 10. **Server-authoritative game state cannot be the only path.** Phase 6 keeps
     the secret server-side and that stays correct for the web. But the same

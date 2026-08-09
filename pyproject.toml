@@ -10,6 +10,7 @@ authors = [
     { name = "Hakan Celepcikay" }, # 2026 rebuild
 ]
 dependencies = [
+    "numpy>=2.5.1",
     "rich>=15.0.0",
 ]
 

@@ -47,6 +47,16 @@ class Solver(Protocol):
         """
         ...
 
+    @property
+    def candidate_indices(self) -> tuple[int, ...]:
+        """The same survivors as positions in `all_candidates(ruleset)`.
+
+        The index ordering is the grid ordering in DESIGN.md, so the Phase 6
+        `/candidates` route and the Phase 7 visualisation consume these rather
+        than converting symbols back into positions.
+        """
+        ...
+
     def guess(self) -> Code:
         """The next code to try.
 

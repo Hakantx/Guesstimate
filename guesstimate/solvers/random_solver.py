@@ -22,4 +22,4 @@ class RandomSolver(BaseSolver):
     stochastic = True
 
     def _choose(self) -> Code:
-        return self._rng.choice(self._candidates)
+        return self._space[self._rng.choice(self._indices)]

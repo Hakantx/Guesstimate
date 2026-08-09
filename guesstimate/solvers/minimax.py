@@ -1,4 +1,4 @@
-"""Knuth's strategy: make the worst case as good as possible."""
+"""Make the worst case as good as possible."""
 
 from collections.abc import Sequence
 
