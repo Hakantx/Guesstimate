@@ -71,7 +71,7 @@ Property tests with Hypothesis:
 | Strategy | Chooses the guess that... | Why it's here |
 |---|---|---|
 | `RandomSolver` | is any surviving candidate, picked at random | the baseline, and what v1 did |
-| `MinimaxSolver` | minimizes the largest possible surviving set | Knuth's approach, optimizes worst case |
+| `MinimaxSolver` | minimizes the largest possible surviving set | optimizes the worst case rather than the mean |
 | `ExpectedSizeSolver` | minimizes the *average* surviving set size | optimizes the mean instead |
 | `EntropySolver` | maximizes information gained, in bits | information-theoretic, often ties minimax |
 
@@ -240,28 +240,40 @@ what the opening book buys on top.
 This is the section an interviewer will ask about. Every number must be one you
 measured yourself.
 
-### Named deliverable: test Knuth's claim properly
+### Named deliverable: settle minimax's worst case over the full space
 
 Phase 3 measured every solver over all 3024 secrets and found **restricted
-minimax dominated** — worst case 7, identical to entropy and expected-size, and
-a worse mean than either (5.044 against 5.008 and 5.011). It is paying for a
-guarantee the other two get for free.
+minimax dominated on the mean** — worst case 7, identical to entropy and
+expected-size, and a worse mean than either (5.044 against 5.008 and 5.011).
 
-That is not yet a verdict on Knuth's method, because Knuth's guarantee comes
-from *unrestricted* minimax: a solver allowed to play codes already ruled out,
-on the grounds that a guess which cannot win may still split the survivors
-better than any that can. Every full-sweep number so far is restricted. Over 100
-sampled secrets, unrestricted minimax's sample maximum was 6 where restricted's
-was 7 — one sample, but pointing at exactly the column the strategy exists to
-improve.
+What a sample could not settle is whether *unrestricted* minimax does better.
+Unrestricted play is the setting in which a worst-case guarantee is normally
+argued for: a guess that cannot win may still split the survivors better than
+any that can. Over 100 sampled secrets, unrestricted minimax's sample maximum
+was 6 where restricted's was 7 — one sample, and exactly the kind of thing a
+maximum drawn from 3% of the space cannot be trusted on.
 
-The run that settles it is a full 3024-secret unrestricted sweep. At roughly
-5.8x the cost of a restricted one that is about ten hours naively, which is why
-it belongs here rather than in Phase 3: the matrix should make it affordable,
-and if it does not, that is itself worth reporting.
+The run that settles it is a full 3024-secret unrestricted sweep. Report worst
+case first, mean second, and put the answer next to the dominance finding in
+`docs/notes/minimax-mean-vs-worst.md` whichever way it falls.
 
-Report worst case first, mean second, and put the answer next to the dominance
-finding in `docs/notes/minimax-mean-vs-worst.md` whichever way it falls.
+Also sweep the **5040-secret variant** (length 4 over the digits 0-9, no
+repeats). That is the variant the published worst-case bound for Bulls and Cows
+is stated for, so it is the only configuration where this repo's numbers can be
+checked against an outside result rather than against itself.
+
+**Answered.** Unrestricted minimax over all 3024 secrets: mean 5.063, worst 7,
+against restricted's 5.044 and 7. The worst case does not move and the mean
+gets slightly worse, so unrestricted play does not rescue it — though it does
+help the other two, taking expected-size to 4.970 and entropy to 4.962.
+
+The 5040-secret variant was swept too, and it is the more useful result. There
+the worst-case optimum is known to be 7 (Chen, Lin and Nguyen, *Strategy
+optimization for deductive games*, EJOR), and **every greedy strategy here
+lands on 8** — entropy, expected-size, and minimax alike. One full guess
+separates greedy play from optimal play, because the published bound comes from
+optimising a whole game tree while these solvers only ever pick the best guess
+for the current turn. Written up in `docs/notes/minimax-mean-vs-worst.md`.
 
 **Done when:** a full minimax benchmark runs in seconds, with before/after
 timings committed, and unrestricted minimax has been swept over all 3024
