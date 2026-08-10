@@ -11,6 +11,9 @@ help:
 	@echo "check    lint + types + test, what CI runs"
 	@echo "bench    run the benchmark sweep into docs/benchmarks/"
 	@echo "clean    remove caches and build artifacts"
+	@echo "serve    run the API on :8000"
+	@echo "schema   regenerate web/src/api/types.ts from the API"
+	@echo "web-check  web typecheck + tests"
 
 install:
 	uv sync
@@ -37,6 +40,21 @@ cov:
 
 bench:
 	uv run python -m guesstimate.bench $(ARGS)
+
+serve:
+	uv run uvicorn guesstimate.api:app --reload
+
+# The web client's types -- and crucially its error codes -- are generated from
+# the API rather than written twice. A code added in schemas.py shows up here
+# as a build failure, not as a runtime surprise in someone's browser.
+schema:
+	cd web && npm run generate
+
+web-install:
+	cd web && npm install
+
+web-check:
+	cd web && npm run typecheck && npm run test
 
 check: lint types test
 

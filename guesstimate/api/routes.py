@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -35,6 +36,7 @@ from .limits import (
 from .schemas import (
     CandidatesResponse,
     ErrorCode,
+    ErrorResponse,
     FeedbackRequest,
     GameStateSchema,
     GuessRequest,
@@ -114,7 +116,23 @@ def create_app(
     async def _refused(request: Request, exc: _Refusal) -> JSONResponse:
         return _error(exc.status_code, exc.code, str(exc.detail))
 
-    @app.post("/game", response_model=GameStateSchema, status_code=201)
+    refuses: dict[int | str, dict[str, Any]] = {
+        422: {"model": ErrorResponse, "description": "Refused before starting"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
+    }
+    on_game: dict[int | str, dict[str, Any]] = {
+        404: {"model": ErrorResponse, "description": "No such game"},
+        409: {"model": ErrorResponse, "description": "Wrong mode, or already over"},
+        422: {"model": ErrorResponse, "description": "Malformed input"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
+    }
+
+    @app.post(
+        "/game",
+        response_model=GameStateSchema,
+        status_code=201,
+        responses=refuses,
+    )
     def new_game(
         body: NewGameRequest, store: SessionStore = Depends(sessions)
     ) -> GameStateSchema:
@@ -177,7 +195,11 @@ def create_app(
             game_id, body.mode, game.state, len(game.candidate_indices())
         )
 
-    @app.get("/game/{game_id}/state", response_model=GameStateSchema)
+    @app.get(
+        "/game/{game_id}/state",
+        response_model=GameStateSchema,
+        responses=on_game,
+    )
     def get_state(
         game_id: str, session: Session = Depends(require_session)
     ) -> GameStateSchema:
@@ -189,7 +211,11 @@ def create_app(
             len(session.game.candidate_indices()),
         )
 
-    @app.get("/game/{game_id}/candidates", response_model=CandidatesResponse)
+    @app.get(
+        "/game/{game_id}/candidates",
+        response_model=CandidatesResponse,
+        responses=on_game,
+    )
     def get_candidates(
         game_id: str, session: Session = Depends(require_session)
     ) -> CandidatesResponse:
@@ -199,7 +225,11 @@ def create_app(
             total=session.game.state.ruleset.space_size, indices=list(indices)
         )
 
-    @app.post("/game/{game_id}/guess", response_model=TurnResultSchema)
+    @app.post(
+        "/game/{game_id}/guess",
+        response_model=TurnResultSchema,
+        responses=on_game,
+    )
     def post_guess(
         game_id: str,
         body: GuessRequest,
@@ -220,7 +250,7 @@ def create_app(
             raise _Refusal(422, "invalid", str(error)) from error
         return TurnResultSchema.of(game.guess(code))
 
-    @app.get("/game/{game_id}/solver-guess")
+    @app.get("/game/{game_id}/solver-guess", responses=on_game)
     def get_solver_guess(
         game_id: str, session: Session = Depends(require_session)
     ) -> dict[str, str]:
@@ -235,7 +265,11 @@ def create_app(
             raise _Refusal(409, "wrong_mode", f"{session.mode} mode has no solver")
         return {"guess": format_code(game.solver_guess())}
 
-    @app.post("/game/{game_id}/feedback", response_model=SolverTurnResultSchema)
+    @app.post(
+        "/game/{game_id}/feedback",
+        response_model=SolverTurnResultSchema,
+        responses=on_game,
+    )
     def post_feedback(
         game_id: str,
         body: FeedbackRequest,
