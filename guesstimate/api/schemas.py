@@ -92,10 +92,25 @@ class GameStateSchema(BaseModel):
     won: bool
     secret: SecretSchema
     surviving: int
+    outcomes: list[str] = Field(
+        description=(
+            "Every answer this ruleset can actually produce, as `+B-C`. Sent "
+            "because it is not derivable from the code length: which outcomes "
+            "are reachable depends on the alphabet too. Four positions over "
+            "two symbols with repeats reaches nine of the fourteen a "
+            "bulls-plus-cows triangle would suggest, so a client computing the "
+            "set itself would offer answers that can never be correct."
+        ),
+    )
 
     @classmethod
     def of(
-        cls, game_id: str, mode: str, state: GameState, surviving: int
+        cls,
+        game_id: str,
+        mode: str,
+        state: GameState,
+        surviving: int,
+        outcomes: tuple[str, ...] = (),
     ) -> GameStateSchema:
         """Render a domain state for the wire."""
         if isinstance(state.secret, SecretRevealed):
@@ -117,6 +132,7 @@ class GameStateSchema(BaseModel):
             won=state.won,
             secret=secret,
             surviving=surviving,
+            outcomes=list(outcomes),
         )
 
 

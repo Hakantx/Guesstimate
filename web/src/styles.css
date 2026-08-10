@@ -1,40 +1,119 @@
+/* Tokens from DESIGN.md. The palette lives here as custom properties so the
+   spec has exactly one implementation -- change a value there and change it
+   here, not in forty utility classes across the components. */
 :root {
-  --ink: #e7e3d8;
-  --backdrop: #0f1115;
-  --rule: #2a2f38;
-  --teal: #2f9e8f;
-  --oxblood: #7d2b2f;
-  color-scheme: dark;
+  --field: #e6e8e3;   /* pale card stock, faintly green-grey, not cream */
+  --ink: #1b2027;     /* body text, near-black with a cold cast */
+  --rule: #c3c7bf;    /* hairlines, grid separators, card edges */
+  --navy: #23304a;    /* structural blocks, headers, the solver's side */
+  --teal: #1b8f87;    /* alive: surviving candidates, bulls */
+  --mustard: #c4901f; /* partial: cows */
+  --oxblood: #7a2233; /* eliminated, errors, the adversary */
+
+  --step--1: 12px;
+  --step-0: 14px;
+  --step-1: 16px;
+  --step-2: 20px;
+  --step-3: 28px;
+  --step-4: 44px;
+
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --condensed: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 }
+
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--backdrop);
+  background: var(--field);
   color: var(--ink);
-  font: 15px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  font: 400 var(--step-1) / 1.55 var(--sans);
 }
 
-main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
-h1 { font-size: 1.1rem; letter-spacing: 0.12em; text-transform: uppercase; }
-.tagline { color: #8a8f98; margin-top: -0.6rem; }
+/* Every digit, count, and score is mono with tabular figures, so numbers do
+   not jitter as they change. */
+.code, .score, .count strong, .turn-number, .pips {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
 
-.watch { display: grid; grid-template-columns: 1fr 20rem; gap: 1.5rem; }
-@media (max-width: 820px) { .watch { grid-template-columns: 1fr; } }
+main { padding: 2rem 1.5rem; max-width: 1120px; margin: 0 auto; }
 
-.candidate-grid { width: 100%; aspect-ratio: 63 / 48; display: block; border: 1px solid var(--rule); }
+h1 {
+  font: 600 var(--step-3) / 1.1 var(--condensed);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.tagline { color: color-mix(in srgb, var(--ink) 60%, var(--field)); margin: 0.2rem 0 1.5rem; }
 
-.count strong { font-size: 1.6rem; color: var(--teal); }
-.board { list-style: none; padding: 0; }
-.board li { display: grid; grid-template-columns: 2rem 4rem 4rem 1fr; gap: 0.5rem; }
-.turn-number { color: #6b7280; }
+.watch, .codebreaker { display: grid; grid-template-columns: 1fr 21rem; gap: 2rem; align-items: start; }
+@media (max-width: 860px) { .watch, .codebreaker { grid-template-columns: 1fr; } }
 
-.feedback fieldset { border: 1px solid var(--rule); margin: 0.5rem 0; }
-.feedback button { font: inherit; background: transparent; color: var(--ink);
-  border: 1px solid var(--rule); padding: 0.35rem 0.7rem; cursor: pointer; }
-.feedback button:hover:not(:disabled) { border-color: var(--teal); }
-.feedback button[aria-pressed="true"] { background: var(--teal); color: var(--backdrop); }
-.feedback button:focus-visible, .done button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.candidate-grid {
+  width: 100%;
+  aspect-ratio: 63 / 48;
+  display: block;
+  border: 1px solid var(--rule);
+  background: var(--navy);
+}
 
-.error { color: var(--oxblood); border-left: 3px solid var(--oxblood); padding-left: 0.6rem; }
-.done button { font: inherit; background: var(--teal); color: var(--backdrop);
-  border: 0; padding: 0.5rem 1rem; cursor: pointer; }
+.count { margin: 0 0 1rem; font-size: var(--step-0); }
+.count strong { display: block; font-size: var(--step-4); line-height: 1; color: var(--teal); }
+
+.board { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.board li {
+  display: grid;
+  grid-template-columns: 1.75rem 5rem 4rem 1fr;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--step-0);
+}
+.turn-number { color: color-mix(in srgb, var(--ink) 45%, var(--field)); }
+.pips .bull { color: var(--teal); }
+.pips .cow { color: var(--mustard); }
+
+fieldset { border: 1px solid var(--rule); margin: 0 0 0.75rem; padding: 0.5rem 0.75rem 0.75rem; }
+legend { font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; }
+
+button {
+  font: 500 var(--step-0) var(--mono);
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  padding: 0.35rem 0.75rem;
+  margin-right: 0.3rem;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--teal); }
+button[aria-pressed="true"] { background: var(--teal); color: var(--field); border-color: var(--teal); }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+
+.primary { background: var(--navy); color: var(--field); border-color: var(--navy); }
+
+input[type="text"] {
+  font: 500 var(--step-2) var(--mono);
+  letter-spacing: 0.25em;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--rule);
+  background: var(--field);
+  color: var(--ink);
+  width: 100%;
+}
+input:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+
+.error {
+  color: var(--oxblood);
+  border-left: 3px solid var(--oxblood);
+  padding-left: 0.6rem;
+  font-size: var(--step-0);
+}
+.waiting { color: color-mix(in srgb, var(--ink) 55%, var(--field)); }
+.done p { font: 600 var(--step-2) var(--condensed); }
+
+.visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+nav { margin-bottom: 1.5rem; }
+label { display:block; font-size: var(--step--1); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.3rem; }
+form button { margin-top: 0.6rem; }

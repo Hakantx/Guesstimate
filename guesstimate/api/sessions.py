@@ -27,6 +27,10 @@ class Session:
     mode: str
     created: float
     touched: float = field(default=0.0)
+    #: Reachable answers for this ruleset, computed once at creation. Enumerating
+    #: them costs a pass over the candidate space, which is affordable once per
+    #: game and wasteful on every state request.
+    outcomes: tuple[str, ...] = ()
 
 
 class SessionStore:
@@ -53,7 +57,7 @@ class SessionStore:
     def _now(self) -> float:
         return float(self._clock())  # type: ignore[operator]
 
-    def create(self, game: Game, mode: str) -> str:
+    def create(self, game: Game, mode: str, outcomes: tuple[str, ...] = ()) -> str:
         """Store a game and return its id.
 
         The id is from `secrets`, not `random`: it is the only thing standing
@@ -64,7 +68,7 @@ class SessionStore:
         game_id = secrets.token_urlsafe(12)
         now = self._now()
         self._sessions[game_id] = Session(
-            game=game, mode=mode, created=now, touched=now
+            game=game, mode=mode, created=now, touched=now, outcomes=outcomes
         )
         return game_id
 

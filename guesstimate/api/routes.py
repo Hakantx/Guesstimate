@@ -32,6 +32,8 @@ from .limits import (
     DEFAULT_TURN_BUDGET_SECONDS,
     RateLimiter,
     first_turn_seconds,
+    outcome_scan_seconds,
+    outcomes_for,
 )
 from .schemas import (
     CandidatesResponse,
@@ -161,7 +163,11 @@ def create_app(
         # thousands across the four. Codebreaker mode never asks a solver
         # anything and is limited by the space cap alone.
         solver_for_mode = None if body.mode == "codebreaker" else body.solver
-        cost = first_turn_seconds(ruleset, solver_for_mode)
+        # Enumerating the reachable answers is part of starting a game now, so
+        # it is part of what the budget has to cover.
+        cost = first_turn_seconds(ruleset, solver_for_mode) + outcome_scan_seconds(
+            ruleset
+        )
         if cost > app.state.turn_budget:
             raise _Refusal(
                 422,
@@ -190,9 +196,14 @@ def create_app(
         else:
             game = LocalWatchGame(ruleset, solver_name=body.solver, rng=rng)
 
-        game_id = store.create(game, body.mode)
+        outcomes = outcomes_for(ruleset)
+        game_id = store.create(game, body.mode, outcomes)
         return GameStateSchema.of(
-            game_id, body.mode, game.state, len(game.candidate_indices())
+            game_id,
+            body.mode,
+            game.state,
+            len(game.candidate_indices()),
+            outcomes,
         )
 
     @app.get(
@@ -209,6 +220,7 @@ def create_app(
             session.mode,
             session.game.state,
             len(session.game.candidate_indices()),
+            session.outcomes,
         )
 
     @app.get(

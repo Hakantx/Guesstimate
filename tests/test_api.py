@@ -21,6 +21,7 @@ from guesstimate.core import (
     Feedback,
     Ruleset,
     all_candidates,
+    feedback_space,
     format_code,
     score,
 )
@@ -568,3 +569,93 @@ def test_a_generous_budget_admits_more(client):
             "/game", json={"ruleset": BIG, "mode": "watch", "solver": "entropy"}
         )
         assert response.status_code == 201
+
+
+# --- reachable outcomes come from the server ------------------------------
+#
+# Which answers a ruleset can produce is not a formula. It depends on the
+# alphabet as well as the length, so a client that derives the set itself will
+# offer answers that can never occur -- and Phase 9 exposes lengths 3-8, hex,
+# and repeats, so the UI will meet those rulesets.
+
+
+def test_the_state_carries_the_reachable_outcomes(client):
+    body = start(client)
+    assert body["outcomes"] == [str(f) for f in feedback_space(SMALL)]
+
+
+def test_a_narrow_alphabet_reaches_fewer_outcomes(client):
+    # Four positions over two symbols with repeats reaches nine answers, not
+    # the fourteen a bulls-plus-cows triangle suggests. A client-side rule
+    # would offer five impossible buttons.
+    body = start(client, ruleset={"length": 4, "alphabet": "12", "allow_repeats": True})
+    assert len(body["outcomes"]) == 9
+    assert "+0-3" not in body["outcomes"]
+    assert "+0-1" not in body["outcomes"]
+
+
+@pytest.mark.parametrize(
+    ("length", "alphabet"), [(3, "12345"), (4, "123456789"), (4, "0123456789")]
+)
+def test_the_impossible_outcome_is_never_offered(client, length, alphabet):
+    # One bull short of a win forces zero cows, for every ruleset. The server
+    # measures rather than assuming, so this checks the measurement agrees.
+    body = start(
+        client,
+        ruleset={"length": length, "alphabet": alphabet, "allow_repeats": False},
+    )
+    assert f"+{length - 1}-1" not in body["outcomes"]
+    assert f"+{length}-0" in body["outcomes"]
+
+
+def test_outcomes_survive_a_state_refetch(client):
+    game_id = start(client)["id"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["outcomes"] == [str(f) for f in feedback_space(SMALL)]
+
+
+def test_the_outcome_scan_is_costed():
+    from guesstimate.api.limits import (
+        _OUTCOMES,
+        _relabelling_classes,
+        outcome_scan_seconds,
+    )
+
+    # Counted combinatorially rather than enumerated, because it is used to
+    # decide whether to do the work at all.
+    assert _relabelling_classes(Ruleset()) == 1
+    assert _relabelling_classes(Ruleset(4, "12", allow_repeats=True)) == 8
+
+    # Cleared explicitly: the estimate is zero for a memoised ruleset, so this
+    # would otherwise pass or fail depending on which tests ran first.
+    _OUTCOMES.clear()
+    assert outcome_scan_seconds(Ruleset()) > 0
+    assert outcome_scan_seconds(Ruleset(4, "0123456789", allow_repeats=True)) > (
+        outcome_scan_seconds(Ruleset())
+    )
+    _OUTCOMES.clear()
+
+
+def test_the_outcome_scan_is_paid_once(client):
+    from guesstimate.api.limits import outcome_scan_seconds, outcomes_for
+
+    heavy = Ruleset(4, "0123456789", allow_repeats=True)
+    outcomes_for(heavy)  # warm it
+    assert outcome_scan_seconds(heavy) == 0.0
+    # And the ruleset the memo made affordable is accepted.
+    response = client.post(
+        "/game",
+        json={
+            "ruleset": {"length": 4, "alphabet": "0123456789", "allow_repeats": True}
+        },
+    )
+    assert response.status_code == 201
+
+
+def test_the_outcome_memo_is_bounded():
+    from guesstimate.api.limits import _MAX_CACHED_OUTCOMES, _OUTCOMES, outcomes_for
+
+    for length in range(1, 9):
+        for size in range(2, 10):
+            outcomes_for(Ruleset(min(length, size), "0123456789"[:size]))
+    assert len(_OUTCOMES) <= _MAX_CACHED_OUTCOMES

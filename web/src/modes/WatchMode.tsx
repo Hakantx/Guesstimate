@@ -46,6 +46,7 @@ export function WatchMode() {
           game.guess && (
             <FeedbackInput
               guess={game.guess}
+              outcomes={game.state.outcomes}
               disabled={game.busy}
               onAnswer={(feedback) => void game.answer(feedback)}
             />

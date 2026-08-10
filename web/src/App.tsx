@@ -1,18 +1,43 @@
+import { useState } from "react";
+import { CodebreakerMode } from "./modes/CodebreakerMode";
 import { WatchMode } from "./modes/WatchMode";
+import { MODE_ORDER, isImplemented } from "./game/modes";
+import type { Mode } from "./game/modes";
 
-/**
- * Watch mode only, for now.
- *
- * Built first on purpose: it is canvas, collapse timing, and the sub-linear
- * curve, which is where the problems are. Codebreaker is a form and a scored
- * board, and it will not teach us anything we do not already know.
- */
+const LABELS: Record<Mode, string> = {
+  codebreaker: "You guess",
+  watch: "Watch the solver",
+  race: "Race the solver",
+  evil: "Evil mode",
+};
+
 export function App() {
+  const [mode, setMode] = useState<Mode>("watch");
+
   return (
     <main>
       <h1>Guesstimate</h1>
-      <p className="tagline">Think of a code. I will find it.</p>
-      <WatchMode />
+      <p className="tagline">Bulls and cows, and a solver that is very good at it.</p>
+
+      <nav aria-label="Game mode">
+        {MODE_ORDER.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={mode === option}
+            disabled={!isImplemented(option) || !BUILT.has(option)}
+            onClick={() => setMode(option)}
+          >
+            {LABELS[option]}
+          </button>
+        ))}
+      </nav>
+
+      {mode === "watch" && <WatchMode />}
+      {mode === "codebreaker" && <CodebreakerMode />}
     </main>
   );
 }
+
+/** Modes with a component. Race and evil are specced, not built. */
+const BUILT = new Set<Mode>(["watch", "codebreaker"]);

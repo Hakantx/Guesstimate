@@ -184,6 +184,11 @@ export interface components {
             secret: components["schemas"]["SecretSchema"];
             /** Surviving */
             surviving: number;
+            /**
+             * Outcomes
+             * @description Every answer this ruleset can actually produce, as `+B-C`. Sent because it is not derivable from the code length: which outcomes are reachable depends on the alphabet too. Four positions over two symbols with repeats reaches nine of the fourteen a bulls-plus-cows triangle would suggest, so a client computing the set itself would offer answers that can never be correct.
+             */
+            outcomes: string[];
         };
         /**
          * GuessRequest
