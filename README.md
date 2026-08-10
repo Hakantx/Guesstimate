@@ -36,7 +36,7 @@ never modified.
 | 3 | Benchmark suite | done |
 | 4 | CLI | done |
 | 5 | Make it fast | done |
-| 6 | API and game server | |
+| 6 | API and game server | done |
 | 7 | The web app | |
 | 8 | Game review | |
 | 9 | Shareability | |

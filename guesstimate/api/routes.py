@@ -26,7 +26,12 @@ from guesstimate.game import (
 )
 from guesstimate.solvers import SOLVERS, InconsistentFeedbackError
 
-from .limits import DEFAULT_MAX_SPACE, RateLimiter
+from .limits import (
+    DEFAULT_MAX_SPACE,
+    DEFAULT_TURN_BUDGET_SECONDS,
+    RateLimiter,
+    first_turn_seconds,
+)
 from .schemas import (
     CandidatesResponse,
     ErrorCode,
@@ -57,6 +62,7 @@ def create_app(
     store: SessionStore | None = None,
     limiter: RateLimiter | None = None,
     max_space: int = DEFAULT_MAX_SPACE,
+    turn_budget: float = DEFAULT_TURN_BUDGET_SECONDS,
 ) -> FastAPI:
     """Build the application, optionally against supplied limits and storage."""
     app = FastAPI(
@@ -67,6 +73,7 @@ def create_app(
     app.state.store = store if store is not None else SessionStore()
     app.state.limiter = limiter if limiter is not None else RateLimiter()
     app.state.max_space = max_space
+    app.state.turn_budget = turn_budget
 
     @app.middleware("http")
     async def _rate_limit(
@@ -129,6 +136,23 @@ def create_app(
             )
         if body.solver not in SOLVERS:
             raise _Refusal(422, "invalid", f"unknown solver {body.solver!r}")
+
+        # The space cap above bounds memory. This bounds CPU, which is the
+        # larger hole: only some modes build a solver, and only some solvers
+        # are quadratic, so the affordable space differs by a factor of
+        # thousands across the four. Codebreaker mode never asks a solver
+        # anything and is limited by the space cap alone.
+        solver_for_mode = None if body.mode == "codebreaker" else body.solver
+        cost = first_turn_seconds(ruleset, solver_for_mode)
+        if cost > app.state.turn_budget:
+            raise _Refusal(
+                422,
+                "invalid",
+                f"a {body.solver} solver on {ruleset.space_size:,} codes needs "
+                f"about {cost:.0f}s to choose its first guess, over this "
+                f"server's {app.state.turn_budget:g}s budget. Try a smaller "
+                f"ruleset, the random solver, or codebreaker mode.",
+            )
 
         rng = random.Random(body.seed)
         secret = None

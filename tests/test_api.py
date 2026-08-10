@@ -498,3 +498,73 @@ def test_a_rate_limited_client_raises_its_own_exception():
         RemoteGame.start(limited, ruleset=SMALL, seed=7)
         with pytest.raises(RateLimitedError):
             RemoteGame.start(limited, ruleset=SMALL, seed=7)
+
+
+# --- the cap has to be solver-aware ---------------------------------------
+#
+# The space cap bounds memory. It does not bound CPU, and CPU is the larger
+# hole: creating a game allocates the candidate list once, but *choosing a
+# guess* compares every guess against every survivor, which is quadratic and
+# happens every turn. One number for all four solvers is wrong by thousands.
+
+BIG = {"length": 4, "alphabet": "0123456789ABCDEF"}  # 43,680 codes
+
+
+def test_a_scoring_solver_is_refused_a_space_it_cannot_search(client):
+    response = client.post(
+        "/game", json={"ruleset": BIG, "mode": "watch", "solver": "entropy"}
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "43,680" in detail and "first guess" in detail
+
+
+def test_the_random_solver_may_take_the_same_space(client):
+    # Linear per turn, so the memory cap is the only thing that binds. Refusing
+    # it because entropy cannot cope would be the "one number" mistake.
+    response = client.post(
+        "/game", json={"ruleset": BIG, "mode": "watch", "solver": "random"}
+    )
+    assert response.status_code == 201
+
+
+def test_codebreaker_may_take_the_same_space(client):
+    # No solver is built at all: the game scores one guess against one secret.
+    assert client.post("/game", json={"ruleset": BIG}).status_code == 201
+
+
+def test_the_refusal_says_what_to_do_instead(client):
+    detail = client.post(
+        "/game", json={"ruleset": BIG, "mode": "race", "solver": "minimax"}
+    ).json()["detail"]
+    assert "smaller ruleset" in detail
+    assert "random" in detail and "codebreaker" in detail
+
+
+def test_the_estimate_separates_the_solvers():
+    from guesstimate.api.limits import first_turn_seconds
+
+    big = Ruleset(4, "0123456789ABCDEF")
+    assert first_turn_seconds(big, None) == 0.0
+    assert first_turn_seconds(big, "random") == 0.0
+    assert first_turn_seconds(big, "entropy") > 60.0
+
+
+def test_the_estimate_scales_quadratically():
+    from guesstimate.api.limits import first_turn_seconds
+
+    small = first_turn_seconds(Ruleset(4, "0123456789ABCDEF"), "entropy")
+    smaller = first_turn_seconds(Ruleset(3, "0123456789ABCDEF"), "entropy")
+    assert smaller < small / 4
+
+
+def test_a_generous_budget_admits_more(client):
+    # The budget is a knob, not a constant: a private deployment that does not
+    # take requests from strangers can raise it.
+    with TestClient(
+        create_app(SessionStore(), max_space=100_000, turn_budget=1e9)
+    ) as generous:
+        response = generous.post(
+            "/game", json={"ruleset": BIG, "mode": "watch", "solver": "entropy"}
+        )
+        assert response.status_code == 201
