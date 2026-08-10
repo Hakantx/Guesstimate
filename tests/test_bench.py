@@ -5,6 +5,7 @@ import statistics
 from pathlib import Path
 
 import pytest
+from hypothesis import given, settings
 
 from guesstimate.bench import (
     Config,
@@ -20,6 +21,8 @@ from guesstimate.bench import (
     summarise,
 )
 from guesstimate.core import Ruleset, all_candidates
+
+from .strategies import rulesets
 
 SMALL = Ruleset(3, "12345")  # 60 codes
 
@@ -396,7 +399,8 @@ def test_the_report_carries_its_provenance():
     assert "Seed" in report and "| 5 |" in report
     assert "12 secrets" in report
     assert provenance.python in report
-    assert "Information floor" in report
+    assert "Entropy floor" in report
+    assert "Counting floor" in report
     assert "Cold open" in report
     assert "Positive means fewer guesses" in report
 
@@ -535,3 +539,71 @@ def test_an_explicit_engine_is_not_second_guessed():
     from guesstimate.bench.__main__ import resolve_engine
 
     assert resolve_engine("pure", Ruleset()) == "pure"
+
+
+# --- the counting floor ----------------------------------------------------
+#
+# A strategy is a decision tree whose nodes have at most (outcomes - 1)
+# continuing edges, because one answer ends the game. That caps how many
+# secrets can be solved at each depth, and packing them as shallowly as the
+# caps allow gives a lower bound on the mean. It is pure counting: unlike an
+# entropy argument it uses nothing about any position, so no mid-game position
+# can invalidate it.
+
+
+def test_the_counting_floor_matches_the_hand_calculation():
+    from guesstimate.bench import counting_floor
+
+    # 5040 secrets, 14 outcomes, so 13 continuing branches:
+    #   depths 1-4 hold 1 + 13 + 169 + 2197 = 2380
+    #   the remaining 2660 sit at depth 5
+    #   (1*1 + 2*13 + 3*169 + 4*2197 + 5*2660) / 5040 = 22622 / 5040
+    assert counting_floor(Ruleset(4, "0123456789")) == pytest.approx(22622 / 5040)
+
+
+def test_the_counting_floor_on_the_default_ruleset():
+    from guesstimate.bench import counting_floor
+
+    # 3024 leaves 644 at depth 5 rather than 2660.
+    assert counting_floor(Ruleset()) == pytest.approx(12542 / 3024)
+
+
+def test_the_counting_floor_beats_the_naive_one():
+    from guesstimate.bench import counting_floor, information_floor
+
+    for ruleset in (Ruleset(), Ruleset(4, "0123456789"), SMALL):
+        assert counting_floor(ruleset) >= information_floor(ruleset)
+
+
+def test_a_single_secret_needs_one_guess():
+    from guesstimate.bench import counting_floor
+
+    assert counting_floor(Ruleset(1, "1")) == 1.0
+
+
+def test_no_measured_solver_beats_the_counting_floor():
+    # The bound has to hold against real play, or it is not a bound. These are
+    # the full-sweep means already published.
+    from guesstimate.bench import counting_floor
+
+    assert counting_floor(Ruleset()) < 5.008  # entropy, 3024 variant
+    assert counting_floor(Ruleset(4, "0123456789")) < 5.314  # entropy, 5040
+
+
+def test_the_counting_floor_is_below_the_known_optimum():
+    # Tanaka proved 5.213 attainable on the 5040 variant; a valid lower bound
+    # must sit under it. The rejected entropy-based floor also happened to, but
+    # by luck rather than construction.
+    from guesstimate.bench import counting_floor
+
+    assert counting_floor(Ruleset(4, "0123456789")) < 5.213
+
+
+@given(rulesets(max_space=200))
+@settings(deadline=None, max_examples=25)
+def test_the_counting_floor_is_a_lower_bound_on_any_real_game(ruleset):
+    from guesstimate.bench import counting_floor
+
+    floor = counting_floor(ruleset)
+    assert floor >= 1.0
+    assert floor <= ruleset.space_size

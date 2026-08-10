@@ -36,7 +36,7 @@ never modified.
 | 3 | Benchmark suite | done |
 | 4 | CLI | done |
 | 5 | Make it fast | done |
-| 6 | API and game server | |
+| 6 | API and game server | done |
 | 7 | The web app | |
 | 8 | Game review | |
 | 9 | Shareability | |
@@ -92,11 +92,31 @@ globally best one, each choice defensible and the accumulation fatal. Greedy
 mistakes rarely matter on average precisely because they are rare, and the tail
 is where the rare things all happened at once.
 
-Worth noting what this does to the information-theoretic floor, which this
-project reports and which is a much weaker bound than it looks:
-log2(5040)/log2(14) is **3.230** guesses, against an achievable 5.213. The floor
-understates the real target by over 60%, because no single code splits 5040
-candidates into fourteen equal parts, let alone repeatedly.
+### Two lower bounds, both sound
+
+The obvious floor is information-theoretic: log2(5040)/log2(14) = **3.230**
+guesses, assuming every guess splits the space perfectly evenly. It is true and
+nearly useless — no single code splits 5040 candidates into fourteen equal
+parts, let alone repeatedly — and it understates the achievable 5.213 by over
+60%.
+
+Counting decision trees does much better. Each node of a strategy has exactly
+one winning edge, so at most 13 that continue, and at most `13 ** (j-1)` secrets
+can be solved on guess `j`. Packing 5040 as shallowly as those caps allow —
+2,380 through depth 4, the remaining 2,660 at depth 5 — gives **4.489**, closing
+63% of the gap to optimal.
+
+That bound is valid where a tempting entropy-based tightening was not, and for
+the same reason: it uses nothing about any position. The rejected attempt, and
+the measurement that killed it, are in
+[`docs/notes/`](docs/notes/minimax-mean-vs-worst.md).
+
+| Bound | 5040 variant | Nature |
+|---|---|---|
+| entropy floor | 3.230 | sound, very loose |
+| counting floor | 4.489 | sound, 63% tighter |
+| attainable (Tanaka) | 5.213 | proved achievable |
+| best solver here | 5.314 | greedy |
 
 ### Strategy barely matters on the default ruleset
 

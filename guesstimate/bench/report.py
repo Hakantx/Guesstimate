@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from guesstimate.core import Ruleset
 
 from .provenance import Provenance
-from .stats import Summary, paired_difference
+from .stats import Summary, counting_floor, paired_difference
 
 
 def _seconds(value: float) -> str:
@@ -27,21 +27,30 @@ def guess_table(
     secret needs 8. Only a full sweep licenses the word "worst".
     """
     worst_header = "Worst" if exhaustive else "Sample max"
+    counting = counting_floor(ruleset)
     rows = [
-        f"| Solver | Mean | Median | {worst_header} | SD | vs floor |",
-        "|---|---|---|---|---|---|",
+        f"| Solver | Mean | Median | {worst_header} | SD | vs entropy floor "
+        f"| vs counting floor |",
+        "|---|---|---|---|---|---|---|",
     ]
     for summary in sorted(summaries, key=lambda s: s.mean):
         rows.append(
             f"| `{summary.config}` | {summary.mean:.3f} | {summary.median:.1f} | "
-            f"{summary.worst} | {summary.stdev:.3f} | +{summary.mean - floor:.3f} |"
+            f"{summary.worst} | {summary.stdev:.3f} | "
+            f"+{summary.mean - floor:.3f} | +{summary.mean - counting:.3f} |"
         )
     rows.append("")
     rows.append(
-        f"Information floor for this ruleset: **{floor:.3f}** guesses "
-        f"(log2({ruleset.space_size}) / log2(outcomes)). No strategy can average "
-        f"less; the `vs floor` column is how far each one is from a bound that "
-        f"assumes every guess splits the space perfectly evenly."
+        f"Two lower bounds, both sound, one much tighter.\n\n"
+        f"**Entropy floor {floor:.3f}** -- log2({ruleset.space_size}) / "
+        f"log2(outcomes), assuming every guess splits the space perfectly "
+        f"evenly. True but weak: no single code splits the candidates into "
+        f"equal parts, let alone repeatedly.\n\n"
+        f"**Counting floor {counting:.3f}** -- a strategy is a decision tree "
+        f"whose nodes have at most one winning edge, so at most "
+        f"`(outcomes - 1) ** (j - 1)` secrets can be solved on guess `j`. "
+        f"Packing the space as shallowly as those caps allow bounds the mean. "
+        f"It uses nothing about any position, which is what makes it sound."
     )
     if not exhaustive:
         rows.append("")
