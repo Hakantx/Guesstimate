@@ -404,6 +404,25 @@ methodology written up.
 - Compile the solver core to WebAssembly (Pyodide, or a Rust port) so the whole
   app can run client-side with no round trips and static hosting. Optional, but
   it makes the candidate animation instant and it is a real engineering flex.
+- **Bake the feedback matrices into the image.** `make matrix` is a Dockerfile
+  step, not a startup step. Building one takes 28.5s for the classic ruleset
+  and 91s for a 10,000-code one, and a container that spends that long before
+  accepting traffic fails its health check and gets killed and restarted — a
+  boot loop that looks like a crash. Baking also means every container starts
+  warm and identical, instead of the first request to each new instance paying
+  for a build that the others already did.
+
+  This is not optional polish. The per-request cost estimator counts a matrix
+  build when no cached matrix exists, so a cold server *refuses* solver-backed
+  modes on the larger rulesets until its matrices are warm. Deploy without
+  baking and the app silently offers fewer game modes than it does in
+  development.
+
+  The estimator stays honest about that on purpose: it reports the real cold
+  cost rather than assuming a warm cache, so a misconfigured deployment refuses
+  work rather than quietly doing hours of it. Baking is what makes the warm
+  path the normal one.
+
 - Deploy: API on Fly.io, frontend on Vercel. Real domain if you have one.
 - README: demo GIF, live link, benchmark table, architecture diagram, the
   optimization writeup, the LLM eval, and one line about where the project came
