@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { RaceMode } from "./modes/RaceMode";
 import { CodebreakerMode } from "./modes/CodebreakerMode";
 import { WatchMode } from "./modes/WatchMode";
 import { MODE_ORDER, isImplemented } from "./game/modes";
@@ -35,9 +36,10 @@ export function App() {
 
       {mode === "watch" && <WatchMode />}
       {mode === "codebreaker" && <CodebreakerMode />}
+      {mode === "race" && <RaceMode />}
     </main>
   );
 }
 
 /** Modes with a component. Race and evil are specced, not built. */
-const BUILT = new Set<Mode>(["watch", "codebreaker"]);
+const BUILT = new Set<Mode>(["watch", "codebreaker", "race"]);

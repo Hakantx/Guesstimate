@@ -540,6 +540,7 @@ def test_the_refusal_says_what_to_do_instead(client):
     ).json()["detail"]
     assert "smaller ruleset" in detail
     assert "random" in detail and "codebreaker" in detail
+    assert "minimax solver" in detail, "the refusal should name what cost the time"
 
 
 def test_the_estimate_separates_the_solvers():
@@ -563,7 +564,7 @@ def test_a_generous_budget_admits_more(client):
     # The budget is a knob, not a constant: a private deployment that does not
     # take requests from strangers can raise it.
     with TestClient(
-        create_app(SessionStore(), max_space=100_000, turn_budget=1e9)
+        create_app(SessionStore(), max_space=100_000, start_budget=1e9)
     ) as generous:
         response = generous.post(
             "/game", json={"ruleset": BIG, "mode": "watch", "solver": "entropy"}
@@ -659,3 +660,36 @@ def test_the_outcome_memo_is_bounded():
         for size in range(2, 10):
             outcomes_for(Ruleset(min(length, size), "0123456789"[:size]))
     assert len(_OUTCOMES) <= _MAX_CACHED_OUTCOMES
+
+
+# --- race ------------------------------------------------------------------
+
+
+def test_the_solver_races_on_the_same_secret(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    turn = client.post(f"/game/{game_id}/solver-turn").json()
+    assert turn["feedback"] == str(score(("1", "2", "3"), tuple(turn["guess"])))
+
+
+def test_the_two_boards_stay_separate(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    client.post(f"/game/{game_id}/guess", json={"guess": "451"})
+    client.post(f"/game/{game_id}/solver-turn")
+    # The player's board has one turn; the solver's is not in it.
+    assert len(client.get(f"/game/{game_id}/state").json()["turns"]) == 1
+
+
+def test_only_race_runs_a_solver_turn(client):
+    for mode in ("codebreaker", "watch"):
+        game_id = start(client, mode=mode)["id"]
+        response = client.post(f"/game/{game_id}/solver-turn")
+        assert response.status_code == 409
+        assert response.json()["error"] == "wrong_mode"
+
+
+def test_the_solver_can_finish_the_race(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    for _ in range(SMALL.space_size):
+        if client.post(f"/game/{game_id}/solver-turn").json()["finished"]:
+            return
+    raise AssertionError("the solver never won")

@@ -3,37 +3,26 @@ import type { components } from "../api/types";
 type Ruleset = components["schemas"]["RulesetSchema"];
 
 /**
- * How many codes a ruleset allows.
+ * Whether a typed code is playable, checked before it is sent.
  *
- * Mirrors `Ruleset.space_size` in the engine, written as the same explicit
- * loop rather than a factorial or a power: with repeats every position is a
- * free choice, without them each consumes a symbol. Duplicated across the
- * language boundary because the grid needs it before any request completes,
- * and it is four lines that the cross-language test suite in MOBILE.md will
- * eventually cover.
+ * This reads the ruleset the server served -- its length, its alphabet, its
+ * repeats flag -- and applies those parameters. It does not re-derive any rule
+ * the server could have stated: `space_size` used to be computed here from a
+ * falling factorial and is now served, because a formula rewritten in a second
+ * language diverges somewhere no Python test can reach.
+ *
+ * The server validates again and is the authority. This exists so an obvious
+ * typo gets an answer without a round trip, not so anything can rely on it.
  */
-export function spaceSize(ruleset: Ruleset): number {
-  const symbols = ruleset.alphabet?.length ?? 0;
-  const length = ruleset.length ?? 0;
-  let size = 1;
-  for (let taken = 0; taken < length; taken += 1) {
-    size *= ruleset.allow_repeats ? symbols : symbols - taken;
-  }
-  return size;
-}
-
-/** Whether a typed code is playable, without asking the server. */
 export function validate(guess: string, ruleset: Ruleset): string | null {
-  const alphabet = ruleset.alphabet ?? "";
-  const length = ruleset.length ?? 0;
   const symbols = [...guess];
 
-  if (symbols.length !== length) {
-    return `Needs ${length} symbols.`;
+  if (symbols.length !== ruleset.length) {
+    return `Needs ${ruleset.length} symbols.`;
   }
   for (const symbol of symbols) {
-    if (!alphabet.includes(symbol)) {
-      return `${symbol} is not one of ${alphabet}.`;
+    if (!ruleset.alphabet.includes(symbol)) {
+      return `${symbol} is not one of ${ruleset.alphabet}.`;
     }
   }
   if (!ruleset.allow_repeats && new Set(symbols).size !== symbols.length) {

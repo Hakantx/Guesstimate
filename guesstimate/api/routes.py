@@ -29,7 +29,7 @@ from guesstimate.solvers import SOLVERS, InconsistentFeedbackError
 
 from .limits import (
     DEFAULT_MAX_SPACE,
-    DEFAULT_TURN_BUDGET_SECONDS,
+    DEFAULT_START_BUDGET_SECONDS,
     RateLimiter,
     first_turn_seconds,
     outcome_scan_seconds,
@@ -43,6 +43,7 @@ from .schemas import (
     GameStateSchema,
     GuessRequest,
     NewGameRequest,
+    RaceTurnSchema,
     SolverTurnResultSchema,
     TurnResultSchema,
 )
@@ -66,7 +67,7 @@ def create_app(
     store: SessionStore | None = None,
     limiter: RateLimiter | None = None,
     max_space: int = DEFAULT_MAX_SPACE,
-    turn_budget: float = DEFAULT_TURN_BUDGET_SECONDS,
+    start_budget: float = DEFAULT_START_BUDGET_SECONDS,
 ) -> FastAPI:
     """Build the application, optionally against supplied limits and storage."""
     app = FastAPI(
@@ -77,7 +78,7 @@ def create_app(
     app.state.store = store if store is not None else SessionStore()
     app.state.limiter = limiter if limiter is not None else RateLimiter()
     app.state.max_space = max_space
-    app.state.turn_budget = turn_budget
+    app.state.start_budget = start_budget
 
     @app.middleware("http")
     async def _rate_limit(
@@ -162,20 +163,28 @@ def create_app(
         # are quadratic, so the affordable space differs by a factor of
         # thousands across the four. Codebreaker mode never asks a solver
         # anything and is limited by the space cap alone.
+        # Two different costs, reported separately so the refusal names the one
+        # that actually bit. Blaming a solver for the cost of enumerating
+        # outcomes -- in a mode that builds no solver -- sends the reader after
+        # the wrong thing.
         solver_for_mode = None if body.mode == "codebreaker" else body.solver
-        # Enumerating the reachable answers is part of starting a game now, so
-        # it is part of what the budget has to cover.
-        cost = first_turn_seconds(ruleset, solver_for_mode) + outcome_scan_seconds(
-            ruleset
-        )
-        if cost > app.state.turn_budget:
+        searching = first_turn_seconds(ruleset, solver_for_mode)
+        enumerating = outcome_scan_seconds(ruleset)
+        if searching + enumerating > app.state.start_budget:
+            blame = (
+                f"a {body.solver} solver would need about {searching:.1f}s to "
+                f"choose its first guess"
+                if searching >= enumerating
+                else f"listing the answers this ruleset can produce would take "
+                f"about {enumerating:.1f}s"
+            )
             raise _Refusal(
                 422,
                 "invalid",
-                f"a {body.solver} solver on {ruleset.space_size:,} codes needs "
-                f"about {cost:.0f}s to choose its first guess, over this "
-                f"server's {app.state.turn_budget:g}s budget. Try a smaller "
-                f"ruleset, the random solver, or codebreaker mode.",
+                f"on {ruleset.space_size:,} codes, {blame} -- over this "
+                f"server's {app.state.start_budget:g}s budget for starting a "
+                f"game. Try a smaller ruleset, the random solver, or "
+                f"codebreaker mode.",
             )
 
         rng = random.Random(body.seed)
@@ -276,6 +285,33 @@ def create_app(
         if not isinstance(game, SolverBackedGame):
             raise _Refusal(409, "wrong_mode", f"{session.mode} mode has no solver")
         return {"guess": format_code(game.solver_guess())}
+
+    @app.post(
+        "/game/{game_id}/solver-turn",
+        response_model=RaceTurnSchema,
+        responses=on_game,
+    )
+    def post_solver_turn(
+        game_id: str, session: Session = Depends(require_session)
+    ) -> RaceTurnSchema:
+        """Let the solver take its turn against the same secret.
+
+        Race only. The solver's board is kept separate from the player's, so
+        this does not touch `state.turns` -- the two are racing, not sharing a
+        sequence of moves.
+        """
+        game = session.game
+        if not isinstance(game, LocalRaceGame):
+            raise _Refusal(
+                409, "wrong_mode", f"{session.mode} mode has no solver to run"
+            )
+        result = game.play_solver_turn()
+        return RaceTurnSchema(
+            guess=format_code(game.solver_turns[-1].guess),
+            feedback=str(result.feedback),
+            finished=result.finished,
+            surviving=result.surviving,
+        )
 
     @app.post(
         "/game/{game_id}/feedback",

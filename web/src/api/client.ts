@@ -94,6 +94,11 @@ export const api = {
   solverGuess: (id: string) =>
     request<{ guess: string }>(`/game/${id}/solver-guess`),
 
+  solverTurn: (id: string) =>
+    request<Schemas["RaceTurnSchema"]>(`/game/${id}/solver-turn`, {
+      method: "POST",
+    }),
+
   feedback: (id: string, feedback: string) =>
     request<SolverTurnResult>(`/game/${id}/feedback`, {
       method: "POST",

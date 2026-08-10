@@ -3,7 +3,6 @@ import { ApiError, api } from "../api/client";
 import type { GameState } from "../api/client";
 import { collapseBetween } from "../grid/collapse";
 import type { Collapse } from "../grid/collapse";
-import { spaceSize } from "./ruleset";
 
 export interface CodebreakerGame {
   readonly state: GameState | null;
@@ -77,7 +76,7 @@ export function useCodebreakerGame(columns: number): CodebreakerGame {
     state,
     alive,
     collapse,
-    total: state ? spaceSize(state.ruleset) : 0,
+    total: state?.space_size ?? 0,
     error,
     busy,
     submit,

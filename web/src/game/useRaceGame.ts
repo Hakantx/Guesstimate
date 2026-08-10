@@ -3,31 +3,39 @@ import { ApiError, api } from "../api/client";
 import type { GameState } from "../api/client";
 import { collapseBetween } from "../grid/collapse";
 import type { Collapse } from "../grid/collapse";
+import type { components } from "../api/types";
 
-export interface WatchGame {
+type RaceTurn = components["schemas"]["RaceTurnSchema"];
+
+export interface RaceGame {
   readonly state: GameState | null;
-  readonly guess: string | null;
   readonly alive: readonly number[];
   readonly collapse: Collapse | null;
+  readonly solverTurns: readonly RaceTurn[];
   readonly total: number;
   readonly error: string | null;
   readonly busy: boolean;
-  answer(feedback: string): Promise<void>;
+  readonly winner: "you" | "solver" | null;
+  submit(guess: string): Promise<void>;
   restart(): Promise<void>;
 }
 
 /**
- * Watch mode: the solver guesses, the player scores.
+ * Race the solver: both sides work on the same secret, turn for turn.
  *
- * One round trip per turn. The server returns the next guess alongside the
- * answer to the last one, because the mode strictly alternates and asking
- * separately would double the latency for nothing.
+ * Composed from what codebreaker and watch already do — the player's move is a
+ * codebreaker turn, the solver's is a watch turn scored by the server instead
+ * of by a human. The only thing genuinely new is that a turn is a pair, so the
+ * solver answers immediately after the player and the two boards stay apart.
+ *
+ * The grid follows the *player's* candidate set. Showing the solver's would be
+ * showing them the answer.
  */
-export function useWatchGame(columns: number): WatchGame {
+export function useRaceGame(columns: number): RaceGame {
   const [state, setState] = useState<GameState | null>(null);
-  const [guess, setGuess] = useState<string | null>(null);
   const [alive, setAlive] = useState<readonly number[]>([]);
   const [collapse, setCollapse] = useState<Collapse | null>(null);
+  const [solverTurns, setSolverTurns] = useState<readonly RaceTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,15 +43,12 @@ export function useWatchGame(columns: number): WatchGame {
     setBusy(true);
     setError(null);
     setCollapse(null);
+    setSolverTurns([]);
     try {
-      const started = await api.start({ mode: "watch", solver: "entropy" });
-      const [candidates, opening] = await Promise.all([
-        api.candidates(started.id),
-        api.solverGuess(started.id),
-      ]);
+      const started = await api.start({ mode: "race", solver: "entropy" });
+      const candidates = await api.candidates(started.id);
       setState(started);
       setAlive(candidates.indices);
-      setGuess(opening.guess);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.detail : String(caught));
     } finally {
@@ -55,23 +60,26 @@ export function useWatchGame(columns: number): WatchGame {
     void restart();
   }, [restart]);
 
-  const answer = useCallback(
-    async (feedback: string) => {
+  const submit = useCallback(
+    async (guess: string) => {
       if (!state || busy) return;
       setBusy(true);
       setError(null);
       try {
-        const result = await api.feedback(state.id, feedback);
+        const mine = await api.guess(state.id, guess);
         const candidates = await api.candidates(state.id);
-        // Diff before storing, so the painter is handed what died rather than
-        // having to work it out from two snapshots mid-frame.
         setCollapse(collapseBetween(alive, candidates.indices, columns));
         setAlive(candidates.indices);
-        setGuess(result.next_guess ?? null);
+
+        // The solver only replies if the player has not already won: once the
+        // game is over the server refuses further moves, and asking anyway
+        // would surface a 409 the player did nothing to deserve.
+        if (!mine.finished) {
+          const theirs = await api.solverTurn(state.id);
+          setSolverTurns((played) => [...played, theirs]);
+        }
         setState(await api.state(state.id));
       } catch (caught) {
-        // A contradiction leaves the game exactly as it was, so the board and
-        // the grid stay put and the player simply answers again.
         setError(caught instanceof ApiError ? caught.detail : String(caught));
       } finally {
         setBusy(false);
@@ -80,15 +88,17 @@ export function useWatchGame(columns: number): WatchGame {
     [state, busy, alive, columns],
   );
 
+  const solverWon = solverTurns.some((turn) => turn.finished);
   return {
     state,
-    guess,
     alive,
     collapse,
+    solverTurns,
     total: state?.space_size ?? 0,
     error,
     busy,
-    answer,
+    winner: state?.won ? "you" : solverWon ? "solver" : null,
+    submit,
     restart,
   };
 }

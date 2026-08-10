@@ -92,6 +92,15 @@ class GameStateSchema(BaseModel):
     won: bool
     secret: SecretSchema
     surviving: int
+    space_size: int = Field(
+        description=(
+            "How many codes the ruleset allows in total. Served rather than "
+            "left for the client to derive: it is a falling factorial or a "
+            "power depending on `allow_repeats`, and a second implementation "
+            "of that in another language is a divergence waiting to happen "
+            "somewhere no Python test can reach."
+        )
+    )
     outcomes: list[str] = Field(
         description=(
             "Every answer this ruleset can actually produce, as `+B-C`. Sent "
@@ -132,6 +141,7 @@ class GameStateSchema(BaseModel):
             won=state.won,
             secret=secret,
             surviving=surviving,
+            space_size=state.ruleset.space_size,
             outcomes=list(outcomes),
         )
 
@@ -207,6 +217,15 @@ class ErrorResponse(BaseModel):
 
     error: ErrorCode
     detail: str
+
+
+class RaceTurnSchema(BaseModel):
+    """One turn by the solver in a race, scored against the shared secret."""
+
+    guess: str
+    feedback: str
+    finished: bool
+    surviving: int
 
 
 class CandidatesResponse(BaseModel):

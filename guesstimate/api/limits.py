@@ -23,9 +23,14 @@ from guesstimate.core import Ruleset
 #: repeats mode, hex at length 4 -- and refuses the ones nobody asked for.
 DEFAULT_MAX_SPACE = 100_000
 
-#: How long one request may spend computing a first turn. A game is created
-#: synchronously, so this is how long a stranger may make a worker wait.
-DEFAULT_TURN_BUDGET_SECONDS = 1.0
+#: How long one request may spend *starting* a game. Creation is synchronous,
+#: so this is how long a stranger may make a worker wait.
+#:
+#: It covers everything creation does, not just the solver's opening search:
+#: enumerating a ruleset's reachable answers is close to a second on a
+#: ten-thousand-code space, and a budget that only counted the search refused
+#: that ruleset while blaming a solver it never built.
+DEFAULT_START_BUDGET_SECONDS = 2.0
 
 #: Requests per minute per client, and how many may arrive at once. A game is
 #: five or six guesses, so a human needs a handful of requests a minute and a

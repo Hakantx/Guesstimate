@@ -117,3 +117,9 @@ input:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
 nav { margin-bottom: 1.5rem; }
 label { display:block; font-size: var(--step--1); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.3rem; }
 form button { margin-top: 0.6rem; }
+
+.race { display: grid; grid-template-columns: 1fr 24rem; gap: 2rem; align-items: start; }
+@media (max-width: 900px) { .race { grid-template-columns: 1fr; } }
+.two-boards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.two-boards h2 { font: 600 var(--step-0) var(--condensed); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.4rem; }
+.two-boards .board li { grid-template-columns: 1.4rem 4rem 1fr; }

@@ -1,23 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { spaceSize, validate } from "./ruleset";
+import { validate } from "./ruleset";
 
 const CLASSIC = { length: 4, alphabet: "123456789", allow_repeats: false };
 const REPEATS = { length: 4, alphabet: "12", allow_repeats: true };
-
-describe("spaceSize", () => {
-  it("matches the engine on the classic game", () => {
-    expect(spaceSize(CLASSIC)).toBe(3024); // 9*8*7*6
-  });
-
-  it("is a power when repeats are allowed", () => {
-    expect(spaceSize(REPEATS)).toBe(16); // 2^4
-  });
-
-  it("matches the 5040 standard variant", () => {
-    expect(spaceSize({ length: 4, alphabet: "0123456789", allow_repeats: false }))
-      .toBe(5040);
-  });
-});
 
 describe("validate", () => {
   it("accepts a legal code", () => {

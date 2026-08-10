@@ -106,6 +106,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/game/{game_id}/solver-turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Solver Turn
+         * @description Let the solver take its turn against the same secret.
+         *
+         *     Race only. The solver's board is kept separate from the player's, so
+         *     this does not touch `state.turns` -- the two are racing, not sharing a
+         *     sequence of moves.
+         */
+        post: operations["post_solver_turn_game__game_id__solver_turn_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/game/{game_id}/feedback": {
         parameters: {
             query?: never;
@@ -185,6 +209,11 @@ export interface components {
             /** Surviving */
             surviving: number;
             /**
+             * Space Size
+             * @description How many codes the ruleset allows in total. Served rather than left for the client to derive: it is a falling factorial or a power depending on `allow_repeats`, and a second implementation of that in another language is a divergence waiting to happen somewhere no Python test can reach.
+             */
+            space_size: number;
+            /**
              * Outcomes
              * @description Every answer this ruleset can actually produce, as `+B-C`. Sent because it is not derivable from the code length: which outcomes are reachable depends on the alphabet too. Four positions over two symbols with repeats reaches nine of the fourteen a bulls-plus-cows triangle would suggest, so a client computing the set itself would offer answers that can never be correct.
              */
@@ -222,6 +251,20 @@ export interface components {
              * @description Fix the code, for demos and reproducible tests. Ignored by watch mode, which has no secret.
              */
             secret?: string | null;
+        };
+        /**
+         * RaceTurnSchema
+         * @description One turn by the solver in a race, scored against the shared secret.
+         */
+        RaceTurnSchema: {
+            /** Guess */
+            guess: string;
+            /** Feedback */
+            feedback: string;
+            /** Finished */
+            finished: boolean;
+            /** Surviving */
+            surviving: number;
         };
         /**
          * RulesetSchema
@@ -548,6 +591,64 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description No such game */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Wrong mode, or already over */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    post_solver_turn_game__game_id__solver_turn_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RaceTurnSchema"];
                 };
             };
             /** @description No such game */
