@@ -18,12 +18,20 @@ export interface CodebreakerGame {
 /**
  * Codebreaker: the player guesses, the server scores.
  *
+ * Evil mode reuses this unchanged. From the client's side the two are the same
+ * conversation -- submit a code, be told how close it was -- and the only
+ * difference is whether anything was ever committed to on the other end. That
+ * the component cannot tell is the whole design of the mode.
+ *
  * Same shape as `useWatchGame` — start, hold the state, diff the candidate set
  * on each turn — because the two modes differ only in who moves. The grid is
  * driven identically, which is the point of the API returning indices rather
  * than codes.
  */
-export function useCodebreakerGame(columns: number): CodebreakerGame {
+export function useCodebreakerGame(
+  columns: number,
+  mode: "codebreaker" | "evil" = "codebreaker",
+): CodebreakerGame {
   const [state, setState] = useState<GameState | null>(null);
   const [alive, setAlive] = useState<readonly number[]>([]);
   const [collapse, setCollapse] = useState<Collapse | null>(null);
@@ -35,7 +43,7 @@ export function useCodebreakerGame(columns: number): CodebreakerGame {
     setError(null);
     setCollapse(null);
     try {
-      const started = await api.start({ mode: "codebreaker", solver: "entropy" });
+      const started = await api.start({ mode, solver: "entropy" });
       const candidates = await api.candidates(started.id);
       setState(started);
       setAlive(candidates.indices);
@@ -44,7 +52,7 @@ export function useCodebreakerGame(columns: number): CodebreakerGame {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     void restart();

@@ -237,7 +237,7 @@ export interface components {
              * @default codebreaker
              * @enum {string}
              */
-            mode: "codebreaker" | "watch" | "race";
+            mode: "codebreaker" | "watch" | "race" | "evil";
             ruleset?: components["schemas"]["RulesetSchema"];
             /**
              * Solver

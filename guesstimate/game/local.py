@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import random
 
-from guesstimate.core import Code, Feedback, Ruleset, all_candidates, score
+from guesstimate.core import (
+    Code,
+    Feedback,
+    Ruleset,
+    all_candidates,
+    feedback_space,
+    score,
+)
 from guesstimate.solvers import SOLVERS, BaseSolver, Partitioner
 
 from .protocol import (
     GameOverError,
     GameState,
     SecretHidden,
+    SecretNever,
     SecretRevealed,
     SolverTurnResult,
     Turn,
@@ -210,3 +218,103 @@ class LocalRaceGame(LocalCodebreakerGame):
     def solver_turns(self) -> tuple[Turn, ...]:
         """The solver's board, kept separate from the player's."""
         return tuple(self._solver_turns)
+
+
+class LocalEvilGame(_Base):
+    """The codemaker never commits. Satisfies `ScoredGame`.
+
+    There is no secret. The game holds every code still consistent with every
+    answer it has given, and when asked to score a guess it picks whichever
+    answer leaves that set largest -- conceding only when cornered onto a single
+    code. It cannot be caught lying, because every answer it gives is one some
+    surviving code would genuinely have produced.
+
+    ### Why it always has something to say
+
+    The invariant is that the surviving set is never empty. It starts as the
+    whole space and each turn keeps one block of a partition of it. Every block
+    is non-empty by construction -- a block exists because some candidate
+    produced that feedback -- so keeping one preserves the invariant. The set
+    also never grows, since a block is a subset.
+
+    ### Why it might never end
+
+    It is not guaranteed to. If the player repeats a guess, every survivor
+    produces the same answer to it, the partition has one block, and the set is
+    unchanged. The adversary never forces progress; the player does, by asking
+    questions that distinguish. Guessing a code that is itself still possible is
+    enough -- it splits off a win block of one, so the largest remaining block
+    is a proper subset and the set must shrink.
+
+    That is fine for a game a person is playing and a trap for a test, which is
+    why the adversarial tests bound their loops and fail on a turn that made no
+    progress rather than hanging.
+
+    ### The adversary is greedy, and greedy is not optimal
+
+    Keeping the largest block maximises the *candidates* remaining, which is not
+    the same as maximising the *guesses* remaining. A smaller block can be the
+    harder position to finish from -- one whose survivors are mutually difficult
+    to tell apart. A truly optimal adversary would search the game tree for the
+    reply that maximises the number of turns the player still needs, which is
+    the same computation the solvers decline to do in the other direction.
+
+    So both sides of this project now play greedily, and on the solver side
+    greedy is measured at one full guess worse than optimal in the worst case
+    (`docs/notes/minimax-mean-vs-worst.md`). The adversary is presumably giving
+    up something similar, and unlike the solver side there is no published bound
+    to say how much.
+    """
+
+    def __init__(self, ruleset: Ruleset) -> None:
+        super().__init__(ruleset)
+        self._survivors = all_candidates(ruleset)
+        self._outcomes = feedback_space(ruleset)
+        self._rank = {outcome: index for index, outcome in enumerate(self._outcomes)}
+
+    @property
+    def state(self) -> GameState:
+        """The board. There is no secret to reveal, and never was."""
+        return GameState(
+            ruleset=self.ruleset,
+            turns=tuple(self._turns),
+            finished=self._finished,
+            won=self._won,
+            secret=SecretNever(),
+        )
+
+    def candidate_indices(self) -> tuple[int, ...]:
+        """Codes still consistent with every answer given.
+
+        When the game ends this holds exactly one code: what the player forced,
+        rather than anything the game chose. That is where a reveal screen gets
+        the answer from, since `SecretNever` deliberately carries none.
+        """
+        positions = {
+            code: index for index, code in enumerate(all_candidates(self.ruleset))
+        }
+        return tuple(positions[code] for code in self._survivors)
+
+    def guess(self, code: Code) -> TurnResult:
+        """Answer with whichever reply keeps the most codes alive."""
+        self._require_open()
+
+        blocks: dict[Feedback, list[Code]] = {}
+        for candidate in self._survivors:
+            blocks.setdefault(score(candidate, code), []).append(candidate)
+
+        # Largest block wins. Ties break on the outcome's position in the
+        # feedback space, ascending -- deterministic, so a replayed game is the
+        # same game, and it prefers a non-winning answer for free: the win is
+        # all bulls, which sorts last, so a tie between conceding and not
+        # concedes only when there is nothing else to say.
+        feedback = min(
+            blocks, key=lambda outcome: (-len(blocks[outcome]), self._rank[outcome])
+        )
+        self._survivors = blocks[feedback]
+        self._record(code, feedback)
+        return TurnResult(
+            feedback=feedback,
+            finished=self._finished,
+            surviving=len(self._survivors),
+        )

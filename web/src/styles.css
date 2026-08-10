@@ -123,3 +123,5 @@ form button { margin-top: 0.6rem; }
 .two-boards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .two-boards h2 { font: 600 var(--step-0) var(--condensed); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.4rem; }
 .two-boards .board li { grid-template-columns: 1.4rem 4rem 1fr; }
+
+.aside { font-size: var(--step-0); color: color-mix(in srgb, var(--ink) 60%, var(--field)); border-left: 2px solid var(--oxblood); padding-left: 0.6rem; }

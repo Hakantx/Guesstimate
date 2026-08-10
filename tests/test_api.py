@@ -693,3 +693,47 @@ def test_the_solver_can_finish_the_race(client):
         if client.post(f"/game/{game_id}/solver-turn").json()["finished"]:
             return
     raise AssertionError("the solver never won")
+
+
+# --- evil ------------------------------------------------------------------
+
+
+def test_an_evil_game_never_reveals_a_secret(client):
+    game_id = start(client, mode="evil")["id"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["secret"] == {"kind": "never", "code": None}
+
+
+def test_an_evil_game_still_reports_never_when_finished(client):
+    # The distinction the discriminated union exists for: finished, won, and
+    # still no secret -- because there never was one.
+    game_id = start(client, mode="evil", ruleset={"length": 2, "alphabet": "12"})["id"]
+    client.post(f"/game/{game_id}/guess", json={"guess": "12"})
+    body = client.post(f"/game/{game_id}/guess", json={"guess": "21"}).json()
+    assert body["finished"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["won"] and state["secret"]["kind"] == "never"
+
+
+def test_the_evil_candidate_set_never_empties(client):
+    game_id = start(client, mode="evil")["id"]
+    for guess in ("123", "451", "245", "341"):
+        body = client.post(f"/game/{game_id}/guess", json={"guess": guess}).json()
+        assert body["surviving"] > 0
+        if body["finished"]:
+            break
+    assert len(client.get(f"/game/{game_id}/candidates").json()["indices"]) > 0
+
+
+def test_evil_mode_has_no_solver(client):
+    game_id = start(client, mode="evil")["id"]
+    assert client.get(f"/game/{game_id}/solver-guess").status_code == 409
+    assert client.post(f"/game/{game_id}/solver-turn").status_code == 409
+
+
+def test_evil_mode_is_not_charged_for_a_solver(client):
+    # It partitions the space per guess, which is linear like codebreaker, so
+    # the large ruleset that a scoring solver is refused is fine here.
+    assert (
+        client.post("/game", json={"ruleset": BIG, "mode": "evil"}).status_code == 201
+    )

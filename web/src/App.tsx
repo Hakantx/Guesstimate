@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EvilMode } from "./modes/EvilMode";
 import { RaceMode } from "./modes/RaceMode";
 import { CodebreakerMode } from "./modes/CodebreakerMode";
 import { WatchMode } from "./modes/WatchMode";
@@ -37,9 +38,10 @@ export function App() {
       {mode === "watch" && <WatchMode />}
       {mode === "codebreaker" && <CodebreakerMode />}
       {mode === "race" && <RaceMode />}
+      {mode === "evil" && <EvilMode />}
     </main>
   );
 }
 
 /** Modes with a component. Race and evil are specced, not built. */
-const BUILT = new Set<Mode>(["watch", "codebreaker", "race"]);
+const BUILT = new Set<Mode>(["watch", "codebreaker", "race", "evil"]);

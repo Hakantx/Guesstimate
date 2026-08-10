@@ -208,6 +208,30 @@ inferior and a worst-case-only table makes it look equal, and the interesting
 fact is that it is simultaneously both. A table that also states its variant is
 the minimum needed for any of it to be checkable.
 
+## Both sides of this project play greedily
+
+Phase 7 added the adversarial codemaker, and it turns out to make the same
+compromise in the opposite direction.
+
+It answers a guess with whichever reply leaves the most codes alive. That is
+the natural greedy rule and it is not the optimal one, for the same reason
+greedy solving is not: **maximising the candidates remaining is not maximising
+the guesses remaining.** A smaller surviving set can be the harder position to
+finish from, if the codes in it are mutually difficult to tell apart. An
+optimal adversary would search the game tree for the reply that costs the
+player the most turns — the same computation, in the same shape, that the
+solvers decline to do.
+
+So the solver plays a locally best move and gives up a full guess in the worst
+case, and the adversary plays a locally best reply and gives up an unknown
+amount. The difference is that the solver side has published optima to be
+measured against and the adversary side has none, so its gap is not merely
+unmeasured here but unquantified anywhere I know of.
+
+Worth stating plainly because the symmetry is easy to miss: this project
+contains two independent greedy players, and greedy is demonstrably suboptimal
+for at least one of them.
+
 <sub>Guess counts above are exact over every secret. The 5040 sweep's wall-clock
 timings are not published: it ran alongside another sweep on a two-core machine
 and its timings are contended. Counts are unaffected by that.</sub>

@@ -48,11 +48,11 @@ export function capabilities(mode: Mode): Capabilities {
 /**
  * Whether the server can start this mode yet.
  *
- * `evil` is in the taxonomy from the first commit on purpose: it is what
- * everything switches on, so an exhaustive switch should fail to compile when
- * it is added rather than silently fall through. It is not in the API's mode
- * union yet, so this is where the two disagree, in one place, deliberately.
+ * All four are now served. This stays as the one place the client and the API
+ * could disagree about what exists, so a mode added to the taxonomy before the
+ * server accepts it has somewhere to be declared rather than failing at
+ * runtime.
  */
 export function isImplemented(mode: Mode): mode is Mode & ServerMode {
-  return mode !== "evil";
+  return MODE_ORDER.includes(mode as (typeof MODE_ORDER)[number]);
 }

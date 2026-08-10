@@ -37,7 +37,7 @@ never modified.
 | 4 | CLI | done |
 | 5 | Make it fast | done |
 | 6 | API and game server | done |
-| 7 | The web app | |
+| 7 | The web app | in progress |
 | 8 | Game review | |
 | 9 | Shareability | |
 | 10 | LLM evaluation | |

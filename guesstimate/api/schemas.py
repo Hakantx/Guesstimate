@@ -50,7 +50,7 @@ class RulesetSchema(BaseModel):
 class NewGameRequest(BaseModel):
     """What to start."""
 
-    mode: Literal["codebreaker", "watch", "race"] = "codebreaker"
+    mode: Literal["codebreaker", "watch", "race", "evil"] = "codebreaker"
     ruleset: RulesetSchema = Field(default_factory=RulesetSchema)
     solver: str = "entropy"
     seed: int | None = None

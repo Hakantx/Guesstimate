@@ -19,6 +19,7 @@ from guesstimate.core import Feedback, format_code, parse_code
 from guesstimate.game import (
     GameOverError,
     LocalCodebreakerGame,
+    LocalEvilGame,
     LocalRaceGame,
     LocalWatchGame,
     ObservedGame,
@@ -167,7 +168,8 @@ def create_app(
         # that actually bit. Blaming a solver for the cost of enumerating
         # outcomes -- in a mode that builds no solver -- sends the reader after
         # the wrong thing.
-        solver_for_mode = None if body.mode == "codebreaker" else body.solver
+        solverless = {"codebreaker", "evil"}
+        solver_for_mode = None if body.mode in solverless else body.solver
         searching = first_turn_seconds(ruleset, solver_for_mode)
         enumerating = outcome_scan_seconds(ruleset)
         if searching + enumerating > app.state.start_budget:
@@ -198,6 +200,8 @@ def create_app(
         game: ScoredGame | ObservedGame
         if body.mode == "codebreaker":
             game = LocalCodebreakerGame(ruleset, secret=secret, rng=rng)
+        elif body.mode == "evil":
+            game = LocalEvilGame(ruleset)
         elif body.mode == "race":
             game = LocalRaceGame(
                 ruleset, secret=secret, rng=rng, solver_name=body.solver

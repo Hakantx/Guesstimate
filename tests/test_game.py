@@ -9,6 +9,7 @@ from guesstimate.game import (
     Game,
     GameOverError,
     LocalCodebreakerGame,
+    LocalEvilGame,
     LocalRaceGame,
     LocalWatchGame,
     ObservedGame,
@@ -348,3 +349,153 @@ def test_only_the_observed_mode_returns_a_solver_turn_result():
     plain = codebreaker.guess(("4", "5", "1"))
     assert isinstance(plain, TurnResult)
     assert not isinstance(plain, SolverTurnResult)
+
+
+# --- evil mode -------------------------------------------------------------
+#
+# The adversary answers with whichever reply keeps the most codes alive, so it
+# never commits to a secret and can never be caught contradicting itself. The
+# invariant is that the surviving set is never empty and never grows.
+#
+# Every loop here is bounded and fails on a turn that made no progress. The
+# adversary does not guarantee termination -- repeat a guess and every survivor
+# gives the same answer, so the set is unchanged and the game runs forever --
+# and an unbounded loop would hang the suite instead of failing it, which this
+# project has already done once.
+
+EVIL = Ruleset(3, "12345")
+
+
+def test_the_adversary_never_commits_to_a_secret():
+    game = LocalEvilGame(EVIL)
+    assert isinstance(game.state.secret, SecretNever)
+    game.guess(("1", "2", "3"))
+    assert isinstance(game.state.secret, SecretNever)
+
+
+def test_a_thousand_adversarial_games_keep_the_set_alive():
+    # CLAUDE.md asks for this specifically: if the surviving set can ever reach
+    # zero, the adversary has answered something no code would have produced
+    # and the whole mode is a lie.
+    rng = random.Random(20260810)
+    space = all_candidates(EVIL)
+
+    for game_number in range(1000):
+        game = LocalEvilGame(EVIL)
+        previous = len(game.candidate_indices())
+        assert previous == EVIL.space_size
+
+        for turn in range(EVIL.space_size + 1):
+            # A player that always guesses a code still consistent with the
+            # answers so far, which is what forces progress.
+            possible = [space[i] for i in game.candidate_indices()]
+            result = game.guess(rng.choice(possible))
+
+            surviving = len(game.candidate_indices())
+            assert surviving > 0, f"game {game_number} turn {turn}: set emptied"
+            assert surviving <= previous, f"game {game_number}: set grew"
+
+            if result.finished:
+                assert surviving == 1
+                break
+            assert surviving < previous, (
+                f"game {game_number} turn {turn}: no progress; the player asked "
+                f"something that did not distinguish"
+            )
+            previous = surviving
+        else:
+            raise AssertionError(f"game {game_number} never finished")
+
+
+def test_the_answer_is_always_one_a_survivor_would_have_given():
+    # The adversary is allowed to be unhelpful, not to lie. Every answer must
+    # be consistent with at least one code that is still standing.
+    rng = random.Random(4)
+    space = all_candidates(EVIL)
+    game = LocalEvilGame(EVIL)
+
+    for _ in range(EVIL.space_size):
+        before = [space[i] for i in game.candidate_indices()]
+        guess = rng.choice(before)
+        result = game.guess(guess)
+        assert any(score(candidate, guess) == result.feedback for candidate in before)
+        if result.finished:
+            return
+    raise AssertionError("game never finished")
+
+
+def test_the_adversary_concedes_only_when_cornered():
+    game = LocalEvilGame(Ruleset(2, "12"))  # two codes: 12 and 21
+    space = all_candidates(Ruleset(2, "12"))
+    # With two codes alive, guessing one splits into a win block and another of
+    # equal size. It must take the one that is not a win.
+    first = game.guess(space[0])
+    assert not first.finished
+    assert first.surviving == 1
+    # Now cornered: one code left, and guessing it must be conceded.
+    assert game.guess(space[1]).finished
+
+
+def test_repeating_a_guess_makes_no_progress():
+    # Documented behaviour, not a defect: the adversary never forces the player
+    # to learn anything. This is the case that would hang an unbounded loop.
+    game = LocalEvilGame(EVIL)
+    game.guess(("1", "2", "3"))
+    before = len(game.candidate_indices())
+    again = game.guess(("1", "2", "3"))
+    assert again.surviving == before
+    assert not again.finished
+
+
+def test_evil_games_replay_identically():
+    # Ties between equal-sized blocks break on the outcome's position, so a
+    # replayed game is the same game. Without that the mode could not be
+    # seeded, shared, or put in a daily challenge.
+    def transcript() -> list[tuple[str, str]]:
+        game = LocalEvilGame(EVIL)
+        rng = random.Random(99)
+        space = all_candidates(EVIL)
+        played: list[tuple[str, str]] = []
+        for _ in range(EVIL.space_size):
+            possible = [space[i] for i in game.candidate_indices()]
+            guess = rng.choice(possible)
+            result = game.guess(guess)
+            played.append(("".join(guess), str(result.feedback)))
+            if result.finished:
+                break
+        return played
+
+    assert transcript() == transcript()
+
+
+def test_the_forced_code_is_readable_from_the_candidates():
+    # SecretNever carries no code on purpose. What the player forced is the one
+    # candidate left standing, which is where a reveal screen reads it.
+    rng = random.Random(7)
+    space = all_candidates(EVIL)
+    game = LocalEvilGame(EVIL)
+    for _ in range(EVIL.space_size):
+        possible = [space[i] for i in game.candidate_indices()]
+        if game.guess(rng.choice(possible)).finished:
+            indices = game.candidate_indices()
+            assert len(indices) == 1
+            assert space[indices[0]] == game.state.turns[-1].guess
+            return
+    raise AssertionError("game never finished")
+
+
+def test_the_adversary_keeps_the_largest_block():
+    # The greedy rule itself: whatever it answers must leave at least as many
+    # codes alive as any other answer would have.
+    game = LocalEvilGame(EVIL)
+    space = all_candidates(EVIL)
+    guess = space[0]
+    before = [space[i] for i in game.candidate_indices()]
+
+    sizes: dict[str, int] = {}
+    for candidate in before:
+        key = str(score(candidate, guess))
+        sizes[key] = sizes.get(key, 0) + 1
+
+    result = game.guess(guess)
+    assert sizes[str(result.feedback)] == max(sizes.values())
