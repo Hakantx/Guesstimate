@@ -29,6 +29,7 @@ from .protocol import (
     SecretNever,
     SecretRevealed,
     SolverBackedGame,
+    SolverTurnResult,
     Turn,
     TurnResult,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "SecretNever",
     "SecretRevealed",
     "SolverBackedGame",
+    "SolverTurnResult",
     "Turn",
     "TurnResult",
 ]

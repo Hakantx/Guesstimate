@@ -11,7 +11,7 @@ here knows about sessions, round trips, or a server clock; those are
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from guesstimate.core import Code, Feedback, Ruleset
 
@@ -81,12 +81,38 @@ class TurnResult:
     surviving: int
 
 
+@dataclass(frozen=True)
+class SolverTurnResult(TurnResult):
+    """A turn in a mode where the solver moves next.
+
+    Watch mode strictly alternates: the solver guesses, the player answers, the
+    solver guesses again. Returning the next move with the answer collapses
+    what would otherwise be two round trips per turn into one, and it keeps
+    *which games can be asked for a solver move* in the type system rather than
+    in a comment -- only `ObservedGame.submit_feedback` returns this.
+
+    Attributes:
+        next_guess: What the solver will play now. `None` exactly when the game
+            has finished, so `next_guess is None` and `finished` always agree.
+    """
+
+    next_guess: Code | None
+
+
 class GameOverError(RuntimeError):
     """A move was played on a finished game."""
 
 
+@runtime_checkable
 class Game(Protocol):
     """Every mode, and the least that can be said about one.
+
+    Runtime-checkable, unlike the `Solver` protocol, and for a different job.
+    There, `isinstance` was rejected because it only compares method *names*
+    and would have passed a solver whose `update` took the wrong arguments --
+    conformance needs real signature checks. Here the question a route asks is
+    exactly "does this game have a `guess` method", which is precisely what
+    name checking answers. Dispatching on capability is what these are for.
 
     Deliberately small. `guess` is *not* here, because whether a game can score
     a guess at all is a per-mode capability rather than something every game
@@ -108,6 +134,7 @@ class Game(Protocol):
         ...
 
 
+@runtime_checkable
 class ScoredGame(Game, Protocol):
     """A game that can score a guess itself.
 
@@ -126,6 +153,7 @@ class ScoredGame(Game, Protocol):
         ...
 
 
+@runtime_checkable
 class SolverBackedGame(Game, Protocol):
     """A game with a solver that will propose moves."""
 
@@ -134,6 +162,7 @@ class SolverBackedGame(Game, Protocol):
         ...
 
 
+@runtime_checkable
 class ObservedGame(SolverBackedGame, Protocol):
     """The solver guesses and the *human* scores -- watch mode.
 
@@ -144,8 +173,8 @@ class ObservedGame(SolverBackedGame, Protocol):
     that can only raise.
     """
 
-    def submit_feedback(self, feedback: Feedback) -> TurnResult:
-        """Answer the solver's last guess.
+    def submit_feedback(self, feedback: Feedback) -> SolverTurnResult:
+        """Answer the solver's last guess, and be told the next one.
 
         Raises:
             GameOverError: If the game has already finished.
@@ -157,5 +186,6 @@ class ObservedGame(SolverBackedGame, Protocol):
         ...
 
 
+@runtime_checkable
 class RacedGame(ScoredGame, SolverBackedGame, Protocol):
     """Player and solver race on the same secret. Both capabilities, no extras."""

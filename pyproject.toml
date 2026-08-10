@@ -10,6 +10,8 @@ authors = [
     { name = "Hakan Celepcikay" }, # 2026 rebuild
 ]
 dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
     "numpy>=2.5.1",
     "rich>=15.0.0",
 ]
@@ -72,6 +74,11 @@ ignore = [
 # Tests are self-describing; docstrings and annotations on them are noise.
 "tests/**" = ["D", "ANN"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's documented idiom is `arg: T = Depends(...)` in the signature; the
+# call in a default is the point, not an accident.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
@@ -98,6 +105,15 @@ check_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
+filterwarnings = [
+    "error",
+    # Starlette 1.6's TestClient wants httpx2; we use httpx directly in
+    # `guesstimate.api.client`, where nothing is deprecated. Adding a second
+    # HTTP stack to silence a test-only warning is a worse trade than muting
+    # it. Drop this line when starlette's TestClient supports httpx again, or
+    # when something other than tests needs httpx2.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning",
+]
 markers = [
     # Run by default -- these are correctness tests and CI must not skip them.
     # The marker exists so a tight local edit loop can use `make test-fast`.

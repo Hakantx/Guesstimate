@@ -12,6 +12,7 @@ from .protocol import (
     GameState,
     SecretHidden,
     SecretRevealed,
+    SolverTurnResult,
     Turn,
     TurnResult,
 )
@@ -141,8 +142,8 @@ class LocalWatchGame(_Base):
             self._pending = self._solver.guess()
         return self._pending
 
-    def submit_feedback(self, feedback: Feedback) -> TurnResult:
-        """Answer the pending guess.
+    def submit_feedback(self, feedback: Feedback) -> SolverTurnResult:
+        """Answer the pending guess, and get the solver's next move with it.
 
         `InconsistentFeedbackError` propagates untouched: the solver refuses the
         answer and stays exactly as it was, so the caller can apologise and ask
@@ -157,10 +158,11 @@ class LocalWatchGame(_Base):
         self._solver.update(guess, feedback)
         self._record(guess, feedback)
         self._pending = None
-        return TurnResult(
+        return SolverTurnResult(
             feedback=feedback,
             finished=self._finished,
             surviving=len(self._solver.candidates),
+            next_guess=None if self._finished else self.solver_guess(),
         )
 
 

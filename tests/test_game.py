@@ -19,6 +19,8 @@ from guesstimate.game import (
     SecretNever,
     SecretRevealed,
     SolverBackedGame,
+    SolverTurnResult,
+    TurnResult,
 )
 from guesstimate.solvers import InconsistentFeedbackError
 
@@ -301,3 +303,48 @@ def test_a_contradictory_win_claim_is_rejected():
         if result.finished:
             break
     pytest.skip("the unrestricted solver never proposed a ruled-out code")
+
+
+# --- the solver's next move rides along with the answer --------------------
+#
+# Watch mode strictly alternates, so a separate solver_guess() round trip per
+# turn buys nothing. Returning it from submit_feedback also keeps "which games
+# can be asked for a solver move" in the type system: only ObservedGame does.
+
+
+def test_the_answer_carries_the_next_guess():
+    game = LocalWatchGame(SMALL, rng=random.Random(0))
+    secret = ("5", "4", "3")
+    first = game.solver_guess()
+    result = game.submit_feedback(score(secret, first))
+    assert isinstance(result, SolverTurnResult)
+    assert result.next_guess is not None
+    assert result.next_guess == game.solver_guess()
+
+
+def test_next_guess_is_none_exactly_when_the_game_is_over():
+    # The invariant that keeps `Code | None` from conflating anything: it is
+    # None if and only if `finished`, which is already on the result.
+    game = LocalWatchGame(SMALL, rng=random.Random(0))
+    secret = ("5", "4", "3")
+    for _ in range(SMALL.space_size):
+        guess = game.solver_guess()
+        result = game.submit_feedback(score(secret, guess))
+        assert (result.next_guess is None) == result.finished
+        if result.finished:
+            return
+    raise AssertionError("game never finished")
+
+
+def test_a_solver_turn_result_is_a_turn_result():
+    game = LocalWatchGame(SMALL, rng=random.Random(0))
+    result = game.submit_feedback(Feedback(3, 0))
+    assert isinstance(result, TurnResult)
+    assert result.finished and result.next_guess is None
+
+
+def test_only_the_observed_mode_returns_a_solver_turn_result():
+    codebreaker = LocalCodebreakerGame(SMALL, secret=("1", "2", "3"))
+    plain = codebreaker.guess(("4", "5", "1"))
+    assert isinstance(plain, TurnResult)
+    assert not isinstance(plain, SolverTurnResult)
