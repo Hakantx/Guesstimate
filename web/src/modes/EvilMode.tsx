@@ -1,4 +1,6 @@
+import { Announcer } from "../board/Announcer";
 import { Board } from "../board/Board";
+import { Sparkline } from "../board/Sparkline";
 import { GuessInput } from "../board/GuessInput";
 import { useCodebreakerGame } from "../game/useCodebreakerGame";
 import { CandidateGrid } from "../grid/CandidateGrid";
@@ -25,6 +27,8 @@ export function EvilMode() {
 
   return (
     <div className="codebreaker">
+      <Announcer state={game.state} surviving={game.alive.length} />
+
       <CandidateGrid
         total={game.total}
         alive={game.alive}
@@ -40,6 +44,7 @@ export function EvilMode() {
           I have not picked a code. Every answer I give is true of something
           still on the board — I am simply choosing the least helpful one.
         </p>
+        <Sparkline counts={game.history} />
 
         <Board state={game.state} />
 

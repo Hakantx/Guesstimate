@@ -11,6 +11,7 @@ export interface RaceGame {
   readonly state: GameState | null;
   readonly alive: readonly number[];
   readonly collapse: Collapse | null;
+  readonly history: readonly number[];
   readonly solverTurns: readonly RaceTurn[];
   readonly total: number;
   readonly error: string | null;
@@ -36,6 +37,7 @@ export function useRaceGame(columns: number): RaceGame {
   const [alive, setAlive] = useState<readonly number[]>([]);
   const [collapse, setCollapse] = useState<Collapse | null>(null);
   const [solverTurns, setSolverTurns] = useState<readonly RaceTurn[]>([]);
+  const [history, setHistory] = useState<readonly number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,12 +45,14 @@ export function useRaceGame(columns: number): RaceGame {
     setBusy(true);
     setError(null);
     setCollapse(null);
+    setHistory([]);
     setSolverTurns([]);
     try {
       const started = await api.start({ mode: "race", solver: "entropy" });
       const candidates = await api.candidates(started.id);
       setState(started);
       setAlive(candidates.indices);
+      setHistory([candidates.indices.length]);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.detail : String(caught));
     } finally {
@@ -70,6 +74,7 @@ export function useRaceGame(columns: number): RaceGame {
         const candidates = await api.candidates(state.id);
         setCollapse(collapseBetween(alive, candidates.indices, columns));
         setAlive(candidates.indices);
+        setHistory((past) => [...past, candidates.indices.length]);
 
         // The solver only replies if the player has not already won: once the
         // game is over the server refuses further moves, and asking anyway
@@ -93,6 +98,7 @@ export function useRaceGame(columns: number): RaceGame {
     state,
     alive,
     collapse,
+    history,
     solverTurns,
     total: state?.space_size ?? 0,
     error,

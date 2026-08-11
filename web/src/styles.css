@@ -125,3 +125,38 @@ form button { margin-top: 0.6rem; }
 .two-boards .board li { grid-template-columns: 1.4rem 4rem 1fr; }
 
 .aside { font-size: var(--step-0); color: color-mix(in srgb, var(--ink) 60%, var(--field)); border-left: 2px solid var(--oxblood); padding-left: 0.6rem; }
+
+/* --- collapse sparkline --------------------------------------------------- */
+.sparkline {
+  font-family: var(--mono);
+  font-size: var(--step-2);
+  line-height: 1;
+  color: var(--teal);
+  letter-spacing: 0.05em;
+  margin: -0.4rem 0 1rem;
+}
+
+/* --- 360px ---------------------------------------------------------------- */
+/* DESIGN.md sizes the grid for a phone at reduced scale, so the layout stacks
+   and the grid keeps its aspect ratio rather than being cropped. */
+@media (max-width: 480px) {
+  main { padding: 1rem 0.85rem; }
+  h1 { font-size: var(--step-2); }
+  .watch, .codebreaker, .race { grid-template-columns: 1fr; gap: 1.25rem; }
+  .two-boards { grid-template-columns: 1fr; }
+  .count strong { font-size: var(--step-3); }
+  .board li { grid-template-columns: 1.4rem 4.5rem 3.5rem 1fr; font-size: var(--step--1); }
+  /* Touch targets: 44px minimum, and no hover-only affordances anywhere. */
+  button { min-height: 44px; min-width: 44px; padding: 0.5rem 0.8rem; margin-bottom: 0.3rem; }
+  input[type="text"] { min-height: 44px; font-size: var(--step-1); }
+  nav { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+}
+
+/* Focus is never invisible, and never only a colour change. */
+:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

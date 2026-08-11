@@ -8,6 +8,7 @@ export interface CodebreakerGame {
   readonly state: GameState | null;
   readonly alive: readonly number[];
   readonly collapse: Collapse | null;
+  readonly history: readonly number[];
   readonly total: number;
   readonly error: string | null;
   readonly busy: boolean;
@@ -35,6 +36,7 @@ export function useCodebreakerGame(
   const [state, setState] = useState<GameState | null>(null);
   const [alive, setAlive] = useState<readonly number[]>([]);
   const [collapse, setCollapse] = useState<Collapse | null>(null);
+  const [history, setHistory] = useState<readonly number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,11 +44,13 @@ export function useCodebreakerGame(
     setBusy(true);
     setError(null);
     setCollapse(null);
+    setHistory([]);
     try {
       const started = await api.start({ mode, solver: "entropy" });
       const candidates = await api.candidates(started.id);
       setState(started);
       setAlive(candidates.indices);
+      setHistory([candidates.indices.length]);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.detail : String(caught));
     } finally {
@@ -68,6 +72,7 @@ export function useCodebreakerGame(
         const candidates = await api.candidates(state.id);
         setCollapse(collapseBetween(alive, candidates.indices, columns));
         setAlive(candidates.indices);
+        setHistory((past) => [...past, candidates.indices.length]);
         setState(await api.state(state.id));
       } catch (caught) {
         // A rejected guess leaves the game untouched: the board and the grid
@@ -84,6 +89,7 @@ export function useCodebreakerGame(
     state,
     alive,
     collapse,
+    history,
     total: state?.space_size ?? 0,
     error,
     busy,

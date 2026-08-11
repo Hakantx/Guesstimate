@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Collapse } from "./collapse";
+import { cellState, sweepDuration } from "./painter";
 import { collapseDuration } from "./timing";
 
 /** Punch-card palette. Kept here so the paint loop never reads CSS. */
@@ -45,9 +46,10 @@ export function useGridPainter(
     const { columns, rows, total } = view;
     const aliveNow = new Set(view.alive);
     const collapse = view.collapse;
-    const duration = reducedMotion
-      ? 0
-      : collapseDuration(collapse?.killed.length ?? 0, total);
+    const duration = sweepDuration(
+      collapseDuration(collapse?.killed.length ?? 0, total),
+      reducedMotion,
+    );
 
     const paint = (elapsed: number) => {
       const width = element.width;
@@ -65,19 +67,9 @@ export function useGridPainter(
         const column = index % columns;
         const row = Math.floor(index / columns);
 
-        let colour = DEAD;
-        if (aliveNow.has(index)) {
-          colour = ALIVE;
-        } else if (collapse && collapse.startAt.has(index)) {
-          // Dying this turn: red while its slice of the sweep is running, then
-          // punched out. Shape as well as colour -- a dead cell is an outline,
-          // so the grid still reads without colour.
-          const start = collapse.startAt.get(index) ?? 0;
-          const local = (progress - start) / Math.max(0.001, 1 - start);
-          colour = local <= 0 ? ALIVE : local < 1 ? DYING : DEAD;
-        }
-
-        context.fillStyle = colour;
+        const state = cellState(index, { alive: aliveNow, collapse, progress });
+        context.fillStyle =
+          state === "alive" ? ALIVE : state === "dying" ? DYING : DEAD;
         context.fillRect(
           originX + column * cell,
           originY + row * cell,

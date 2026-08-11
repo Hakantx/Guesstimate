@@ -52,12 +52,20 @@ export function CandidateGrid({ total, alive, collapse }: Props) {
 
   useGridPainter(canvas, { total, columns, rows, alive, collapse }, reduced);
 
+  // `img` with a label, because that is the most a canvas can honestly claim:
+  // its contents are pixels and there is nothing inside for a reader to walk.
+  // The numbers it depicts are announced by `Announcer` through a live region,
+  // so nothing here is the only route to the information.
   return (
     <canvas
       ref={canvas}
       className="candidate-grid"
       role="img"
-      aria-label={`${alive.length} of ${total} codes still possible`}
+      aria-label={
+        `Candidate grid: ${alive.length.toLocaleString()} of ` +
+        `${total.toLocaleString()} codes still possible. Each cell is one code; ` +
+        `cells go dark as codes are ruled out.`
+      }
     />
   );
 }

@@ -9,6 +9,7 @@ export interface WatchGame {
   readonly guess: string | null;
   readonly alive: readonly number[];
   readonly collapse: Collapse | null;
+  readonly history: readonly number[];
   readonly total: number;
   readonly error: string | null;
   readonly busy: boolean;
@@ -28,6 +29,7 @@ export function useWatchGame(columns: number): WatchGame {
   const [guess, setGuess] = useState<string | null>(null);
   const [alive, setAlive] = useState<readonly number[]>([]);
   const [collapse, setCollapse] = useState<Collapse | null>(null);
+  const [history, setHistory] = useState<readonly number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,6 +37,7 @@ export function useWatchGame(columns: number): WatchGame {
     setBusy(true);
     setError(null);
     setCollapse(null);
+    setHistory([]);
     try {
       const started = await api.start({ mode: "watch", solver: "entropy" });
       const [candidates, opening] = await Promise.all([
@@ -43,6 +46,7 @@ export function useWatchGame(columns: number): WatchGame {
       ]);
       setState(started);
       setAlive(candidates.indices);
+      setHistory([candidates.indices.length]);
       setGuess(opening.guess);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.detail : String(caught));
@@ -67,6 +71,7 @@ export function useWatchGame(columns: number): WatchGame {
         // having to work it out from two snapshots mid-frame.
         setCollapse(collapseBetween(alive, candidates.indices, columns));
         setAlive(candidates.indices);
+        setHistory((past) => [...past, candidates.indices.length]);
         setGuess(result.next_guess ?? null);
         setState(await api.state(state.id));
       } catch (caught) {
@@ -85,6 +90,7 @@ export function useWatchGame(columns: number): WatchGame {
     guess,
     alive,
     collapse,
+    history,
     total: state?.space_size ?? 0,
     error,
     busy,

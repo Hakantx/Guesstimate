@@ -1,4 +1,6 @@
+import { Announcer } from "../board/Announcer";
 import { Board } from "../board/Board";
+import { Sparkline } from "../board/Sparkline";
 import { FeedbackInput } from "../board/FeedbackInput";
 import { useWatchGame } from "../game/useWatchGame";
 import { CandidateGrid } from "../grid/CandidateGrid";
@@ -21,6 +23,8 @@ export function WatchMode() {
 
   return (
     <div className="watch">
+      <Announcer state={game.state} surviving={game.alive.length} solverGuess={game.guess} />
+
       <CandidateGrid
         total={game.total}
         alive={game.alive}
@@ -32,6 +36,7 @@ export function WatchMode() {
           <strong>{game.alive.length.toLocaleString()}</strong> of{" "}
           {game.total.toLocaleString()} still possible
         </p>
+        <Sparkline counts={game.history} />
 
         <Board state={game.state} />
 

@@ -1,4 +1,6 @@
+import { Announcer } from "../board/Announcer";
 import { Board } from "../board/Board";
+import { Sparkline } from "../board/Sparkline";
 import { GuessInput } from "../board/GuessInput";
 import { useRaceGame } from "../game/useRaceGame";
 import { CandidateGrid } from "../grid/CandidateGrid";
@@ -18,6 +20,8 @@ export function RaceMode() {
 
   return (
     <div className="race">
+      <Announcer state={game.state} surviving={game.alive.length} />
+
       <CandidateGrid
         total={game.total}
         alive={game.alive}
@@ -25,6 +29,8 @@ export function RaceMode() {
       />
 
       <div className="sidebar">
+        <Sparkline counts={game.history} />
+
         <div className="two-boards">
           <section>
             <h2>You</h2>
