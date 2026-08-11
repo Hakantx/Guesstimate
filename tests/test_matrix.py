@@ -256,13 +256,24 @@ def test_the_classic_ruleset_is_affordable():
 
 
 def test_time_binds_before_memory_at_the_defaults():
-    # Measured, not assumed: the memory ceiling is reached at n=23,170 and the
-    # time ceiling at n=13,945, so anything big enough to worry about memory is
-    # already too slow to build. 15,120 codes is 229 MB -- comfortably under
+    # Measured, not assumed: anything big enough to worry about memory is
+    # already too slow to build. 17,160 codes is 294 MB -- comfortably under
     # the 512 MB ceiling -- and still declined, on time alone.
+    #
+    # The ruleset is chosen with margin on purpose. `scoring_rate` is measured
+    # on the machine, so it moves with load: this file first used a 15,120-code
+    # ruleset whose estimated build sat at 562s on an idle machine and 664s on a
+    # busy one, straddling the 600s ceiling and failing whenever something else
+    # was running. Assertions that depend on a measured rate need to be far
+    # enough from the boundary that the measurement cannot decide them.
+    #
+    # Rates observed on this machine span 5.8-7.7us per pair. At the fastest of
+    # those, 17,160 codes still estimates 730s against a 600s cap; the rate
+    # would have to fall to 4.1us -- 30% below anything measured -- to flip
+    # this. Memory has comparable margin at 294 MB against 537.
     from guesstimate.data import estimate
 
-    costs = estimate(Ruleset(5, "123456789"))
+    costs = estimate(Ruleset(4, "0123456789ABC"))  # 17,160 codes
     assert not costs.too_big
     assert costs.too_slow
     assert not costs.affordable

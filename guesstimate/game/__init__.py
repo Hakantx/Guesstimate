@@ -16,7 +16,12 @@ Watch mode is why `guess` is not on the base: there the secret is in the
 player's head, so the game cannot score a code it is handed.
 """
 
-from .local import LocalCodebreakerGame, LocalRaceGame, LocalWatchGame
+from .local import (
+    LocalCodebreakerGame,
+    LocalEvilGame,
+    LocalRaceGame,
+    LocalWatchGame,
+)
 from .protocol import (
     Game,
     GameOverError,
@@ -39,6 +44,7 @@ __all__ = [
     "GameOverError",
     "GameState",
     "LocalCodebreakerGame",
+    "LocalEvilGame",
     "LocalRaceGame",
     "LocalWatchGame",
     "ObservedGame",

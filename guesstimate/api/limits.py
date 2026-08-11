@@ -23,15 +23,88 @@ from guesstimate.core import Ruleset
 #: repeats mode, hex at length 4 -- and refuses the ones nobody asked for.
 DEFAULT_MAX_SPACE = 100_000
 
-#: How long one request may spend computing a first turn. A game is created
-#: synchronously, so this is how long a stranger may make a worker wait.
-DEFAULT_TURN_BUDGET_SECONDS = 1.0
+#: How long one request may spend *starting* a game. Creation is synchronous,
+#: so this is how long a stranger may make a worker wait.
+#:
+#: It covers everything creation does, not just the solver's opening search:
+#: enumerating a ruleset's reachable answers is close to a second on a
+#: ten-thousand-code space, and a budget that only counted the search refused
+#: that ruleset while blaming a solver it never built.
+DEFAULT_START_BUDGET_SECONDS = 2.0
 
 #: Requests per minute per client, and how many may arrive at once. A game is
 #: five or six guesses, so a human needs a handful of requests a minute and a
 #: script does not need to be accommodated.
 DEFAULT_PER_MINUTE = 120
 DEFAULT_BURST = 30
+
+
+def _relabelling_classes(ruleset: Ruleset) -> int:
+    """How many symbol patterns a code of this shape can have.
+
+    With no repeats every code is the same all-distinct pattern, so there is
+    one. With repeats it is the number of ways to partition the positions into
+    at most `len(alphabet)` groups -- a sum of Stirling numbers of the second
+    kind. Counted rather than enumerated, because this is used to *estimate*
+    work before agreeing to do it.
+    """
+    if not ruleset.allow_repeats:
+        return 1
+
+    length = ruleset.length
+    groups = min(length, len(ruleset.alphabet))
+    # stirling[k] holds S(n, k) as n climbs.
+    stirling = [0] * (length + 1)
+    stirling[0] = 1
+    for _ in range(length):
+        stirling = [
+            (stirling[k - 1] if k else 0) + k * stirling[k] for k in range(length + 1)
+        ]
+    return sum(stirling[1 : groups + 1])
+
+
+#: Reachable answers, memoised per ruleset. Bounded so that a caller asking for
+#: thousands of distinct rulesets cannot grow it without limit; the whole cache
+#: is dropped rather than evicted one entry at a time, because the working set
+#: is a handful of rulesets and an LRU would be machinery for nothing.
+_MAX_CACHED_OUTCOMES = 256
+_OUTCOMES: dict[Ruleset, tuple[str, ...]] = {}
+
+
+def outcomes_for(ruleset: Ruleset) -> tuple[str, ...]:
+    """Every answer this ruleset can produce, as `+B-C`, computed once.
+
+    Memoised for the same reason the feedback matrix is: it is a pure function
+    of the rules, it costs a pass over the candidate space, and the app serves
+    a small number of rulesets over and over.
+    """
+    cached = _OUTCOMES.get(ruleset)
+    if cached is not None:
+        return cached
+
+    from guesstimate.core import feedback_space
+
+    computed = tuple(str(outcome) for outcome in feedback_space(ruleset))
+    if len(_OUTCOMES) >= _MAX_CACHED_OUTCOMES:
+        _OUTCOMES.clear()
+    _OUTCOMES[ruleset] = computed
+    return computed
+
+
+def outcome_scan_seconds(ruleset: Ruleset) -> float:
+    """Estimated seconds to enumerate a ruleset's reachable answers.
+
+    Zero once they are memoised. Enumerating is one scoring per candidate per
+    relabelling class, which is trivial for the classic game and about a second
+    for ten thousand codes with repeats -- affordable once, not per request,
+    which is exactly what the memo is for.
+    """
+    if ruleset in _OUTCOMES:
+        return 0.0
+
+    from guesstimate.data import scoring_rate
+
+    return _relabelling_classes(ruleset) * ruleset.space_size * scoring_rate()
 
 
 def first_turn_seconds(ruleset: Ruleset, solver_name: str | None) -> float:

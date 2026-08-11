@@ -21,6 +21,7 @@ from guesstimate.core import (
     Feedback,
     Ruleset,
     all_candidates,
+    feedback_space,
     format_code,
     score,
 )
@@ -539,6 +540,7 @@ def test_the_refusal_says_what_to_do_instead(client):
     ).json()["detail"]
     assert "smaller ruleset" in detail
     assert "random" in detail and "codebreaker" in detail
+    assert "minimax solver" in detail, "the refusal should name what cost the time"
 
 
 def test_the_estimate_separates_the_solvers():
@@ -562,9 +564,176 @@ def test_a_generous_budget_admits_more(client):
     # The budget is a knob, not a constant: a private deployment that does not
     # take requests from strangers can raise it.
     with TestClient(
-        create_app(SessionStore(), max_space=100_000, turn_budget=1e9)
+        create_app(SessionStore(), max_space=100_000, start_budget=1e9)
     ) as generous:
         response = generous.post(
             "/game", json={"ruleset": BIG, "mode": "watch", "solver": "entropy"}
         )
         assert response.status_code == 201
+
+
+# --- reachable outcomes come from the server ------------------------------
+#
+# Which answers a ruleset can produce is not a formula. It depends on the
+# alphabet as well as the length, so a client that derives the set itself will
+# offer answers that can never occur -- and Phase 9 exposes lengths 3-8, hex,
+# and repeats, so the UI will meet those rulesets.
+
+
+def test_the_state_carries_the_reachable_outcomes(client):
+    body = start(client)
+    assert body["outcomes"] == [str(f) for f in feedback_space(SMALL)]
+
+
+def test_a_narrow_alphabet_reaches_fewer_outcomes(client):
+    # Four positions over two symbols with repeats reaches nine answers, not
+    # the fourteen a bulls-plus-cows triangle suggests. A client-side rule
+    # would offer five impossible buttons.
+    body = start(client, ruleset={"length": 4, "alphabet": "12", "allow_repeats": True})
+    assert len(body["outcomes"]) == 9
+    assert "+0-3" not in body["outcomes"]
+    assert "+0-1" not in body["outcomes"]
+
+
+@pytest.mark.parametrize(
+    ("length", "alphabet"), [(3, "12345"), (4, "123456789"), (4, "0123456789")]
+)
+def test_the_impossible_outcome_is_never_offered(client, length, alphabet):
+    # One bull short of a win forces zero cows, for every ruleset. The server
+    # measures rather than assuming, so this checks the measurement agrees.
+    body = start(
+        client,
+        ruleset={"length": length, "alphabet": alphabet, "allow_repeats": False},
+    )
+    assert f"+{length - 1}-1" not in body["outcomes"]
+    assert f"+{length}-0" in body["outcomes"]
+
+
+def test_outcomes_survive_a_state_refetch(client):
+    game_id = start(client)["id"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["outcomes"] == [str(f) for f in feedback_space(SMALL)]
+
+
+def test_the_outcome_scan_is_costed():
+    from guesstimate.api.limits import (
+        _OUTCOMES,
+        _relabelling_classes,
+        outcome_scan_seconds,
+    )
+
+    # Counted combinatorially rather than enumerated, because it is used to
+    # decide whether to do the work at all.
+    assert _relabelling_classes(Ruleset()) == 1
+    assert _relabelling_classes(Ruleset(4, "12", allow_repeats=True)) == 8
+
+    # Cleared explicitly: the estimate is zero for a memoised ruleset, so this
+    # would otherwise pass or fail depending on which tests ran first.
+    _OUTCOMES.clear()
+    assert outcome_scan_seconds(Ruleset()) > 0
+    assert outcome_scan_seconds(Ruleset(4, "0123456789", allow_repeats=True)) > (
+        outcome_scan_seconds(Ruleset())
+    )
+    _OUTCOMES.clear()
+
+
+def test_the_outcome_scan_is_paid_once(client):
+    from guesstimate.api.limits import outcome_scan_seconds, outcomes_for
+
+    heavy = Ruleset(4, "0123456789", allow_repeats=True)
+    outcomes_for(heavy)  # warm it
+    assert outcome_scan_seconds(heavy) == 0.0
+    # And the ruleset the memo made affordable is accepted.
+    response = client.post(
+        "/game",
+        json={
+            "ruleset": {"length": 4, "alphabet": "0123456789", "allow_repeats": True}
+        },
+    )
+    assert response.status_code == 201
+
+
+def test_the_outcome_memo_is_bounded():
+    from guesstimate.api.limits import _MAX_CACHED_OUTCOMES, _OUTCOMES, outcomes_for
+
+    for length in range(1, 9):
+        for size in range(2, 10):
+            outcomes_for(Ruleset(min(length, size), "0123456789"[:size]))
+    assert len(_OUTCOMES) <= _MAX_CACHED_OUTCOMES
+
+
+# --- race ------------------------------------------------------------------
+
+
+def test_the_solver_races_on_the_same_secret(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    turn = client.post(f"/game/{game_id}/solver-turn").json()
+    assert turn["feedback"] == str(score(("1", "2", "3"), tuple(turn["guess"])))
+
+
+def test_the_two_boards_stay_separate(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    client.post(f"/game/{game_id}/guess", json={"guess": "451"})
+    client.post(f"/game/{game_id}/solver-turn")
+    # The player's board has one turn; the solver's is not in it.
+    assert len(client.get(f"/game/{game_id}/state").json()["turns"]) == 1
+
+
+def test_only_race_runs_a_solver_turn(client):
+    for mode in ("codebreaker", "watch"):
+        game_id = start(client, mode=mode)["id"]
+        response = client.post(f"/game/{game_id}/solver-turn")
+        assert response.status_code == 409
+        assert response.json()["error"] == "wrong_mode"
+
+
+def test_the_solver_can_finish_the_race(client):
+    game_id = start(client, mode="race", secret="123")["id"]
+    for _ in range(SMALL.space_size):
+        if client.post(f"/game/{game_id}/solver-turn").json()["finished"]:
+            return
+    raise AssertionError("the solver never won")
+
+
+# --- evil ------------------------------------------------------------------
+
+
+def test_an_evil_game_never_reveals_a_secret(client):
+    game_id = start(client, mode="evil")["id"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["secret"] == {"kind": "never", "code": None}
+
+
+def test_an_evil_game_still_reports_never_when_finished(client):
+    # The distinction the discriminated union exists for: finished, won, and
+    # still no secret -- because there never was one.
+    game_id = start(client, mode="evil", ruleset={"length": 2, "alphabet": "12"})["id"]
+    client.post(f"/game/{game_id}/guess", json={"guess": "12"})
+    body = client.post(f"/game/{game_id}/guess", json={"guess": "21"}).json()
+    assert body["finished"]
+    state = client.get(f"/game/{game_id}/state").json()
+    assert state["won"] and state["secret"]["kind"] == "never"
+
+
+def test_the_evil_candidate_set_never_empties(client):
+    game_id = start(client, mode="evil")["id"]
+    for guess in ("123", "451", "245", "341"):
+        body = client.post(f"/game/{game_id}/guess", json={"guess": guess}).json()
+        assert body["surviving"] > 0
+        if body["finished"]:
+            break
+    assert len(client.get(f"/game/{game_id}/candidates").json()["indices"]) > 0
+
+
+def test_evil_mode_has_no_solver(client):
+    game_id = start(client, mode="evil")["id"]
+    assert client.get(f"/game/{game_id}/solver-guess").status_code == 409
+    assert client.post(f"/game/{game_id}/solver-turn").status_code == 409
+
+
+def test_evil_mode_is_not_charged_for_a_solver(client):
+    # It partitions the space per guess, which is linear like codebreaker, so
+    # the large ruleset that a scoring solver is refused is fine here.
+    assert (
+        client.post("/game", json={"ruleset": BIG, "mode": "evil"}).status_code == 201
+    )

@@ -157,6 +157,27 @@ Android alone is still a real shipped app.
 
 ---
 
+## Build-time data, not startup-time data
+
+The feedback matrices are precomputed and cached, and they must be produced
+when an artefact is *built*, never when it starts.
+
+For the server that is a Dockerfile step: a container spending 28.5 seconds
+building a matrix before it can answer a health check gets killed and retried,
+which reads as a crash loop rather than as slow warmup. For the mobile build
+the same rule applies for a stronger reason — a phone should not spend half a
+minute of CPU and battery recomputing something the build machine could have
+shipped, and offline play means there is no server to fall back to while it
+does.
+
+That points at a constraint for the TypeScript port. A 3024-code matrix is 9 MB
+as `uint8`, which is too much to bundle casually into an app or a service
+worker cache. The options are to ship a compressed matrix, to ship the opening
+book only and score the rest on demand, or to build the matrix once on first
+launch and store it — and only the third preserves offline play on first run
+without a large download. Whichever it is, it is a decision to make before
+Phase 12 rather than during it.
+
 ## What this changes upstream
 
 - **Phase 1** — the TypeScript port is easier if `core/` is written with a

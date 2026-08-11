@@ -112,8 +112,19 @@ LLM evaluation harness, and a set of visualizations. The original is tagged
 ## Stack
 
 - Backend: Python 3.12, FastAPI, uv for dependency management
-- Frontend: React + Vite + TypeScript + Tailwind, Framer Motion for the
-  candidate-grid animation
+- Frontend: React + Vite + TypeScript, Framer Motion for page-level motion
+
+  **No Tailwind, deliberately.** DESIGN.md specifies a token-driven look — a
+  named palette, a fixed type scale, IBM Plex at three widths — and those live
+  as CSS custom properties in `web/src/styles.css`, one declaration per token.
+  A utility framework earns its keep on generic UI built at speed; here the
+  surface is a canvas, a board, and a row of buttons, and spreading seven
+  colours across utility classes would mean the spec had forty implementations
+  instead of one.
+
+  **Framer Motion is for page transitions, not the grid.** 3024 animated DOM
+  nodes will not hold a frame budget. The candidate grid is a single canvas
+  with an imperative paint loop; see DESIGN.md.
 - Tests: pytest, Hypothesis, vitest, Playwright for one end-to-end smoke test
 - Lint/types: ruff, mypy (strict), eslint
 - CI: GitHub Actions on every push — lint, types, tests, coverage, and a

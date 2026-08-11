@@ -60,6 +60,63 @@ the list is sorted, each leading digit occupies one contiguous run of 336
 candidates — 5⅓ rows at 63 columns — so leading digits still read as visible
 horizontal bands without the layout having to encode them.
 
+### Do not "fix" the sort order
+
+That banding is not decoration and it is not an accident of the data. Rule out a
+leading digit and its entire 336-cell run dies at once, which reads as a solid
+horizontal stripe going dark — the player sees *which* deduction just happened,
+not merely that something did. It costs nothing: the ordering is already the
+canonical candidate order the engine, the API, and the benchmark all use, so the
+grid gets a free explanatory channel by not shuffling.
+
+Any later change that sorts by likelihood, groups by survival, or shuffles to
+"spread the animation out" destroys this. If the layout ever needs to change,
+the banding has to be replaced deliberately with something that carries the same
+information, not dropped as a side effect.
+
+### Render on canvas, not in the DOM
+
+3024 individually animated DOM nodes will not hold a frame budget, and Framer
+Motion per cell is the wrong tool at this count. A prototype confirmed canvas is
+smooth at 3024 real permutations with real scoring and a staggered column sweep.
+Framer Motion stays for page-level transitions where there are tens of elements,
+not thousands.
+
+### Collapse timing must vary, and not by turn number
+
+Measured over all 3024 secrets, using the solver's canonical opening:
+
+| After turn | Mean survivors | Cumulative eliminated |
+|---|---|---|
+| 1 | 537.6 | 82.2% |
+| 2 | 88.6 | 97.1% |
+| 3 | 12.2 | 99.6% |
+| 4 | 1.9 | 99.9% |
+
+So the first turn does most of the work and the rest is mopping up. A uniform
+per-turn duration spends the same time on a turn that kills 2,400 cells as on
+one that kills ten, which makes the endgame feel stalled.
+
+But turn one is not one thing. The opening splits the space into fourteen
+buckets whose sizes are 1, 6, 8, 9, 20, 60, 120, 120, 180, 220, 240, 480, 720
+and 840, and which one a player lands in is the luck of their secret:
+
+- median game: 720 survive, 76% eliminated
+- lower quartile: 240 survive, 92% eliminated
+- best case: 1 survives — the opening was the secret
+- worst case: 840 survive, 72% eliminated
+
+A single "turn one is slow and dramatic" duration is therefore wrong too: the
+same nominal turn can kill 2,184 cells or 3,023 of them. **Drive the duration
+from how many cells actually die, not from the turn index.** Something
+sub-linear in the kill count — a square root, or a floor plus a scaled term —
+keeps the big opening sweep dramatic without making a 6-cell endgame take the
+same time as a 2,000-cell collapse.
+
+The 840-survivor case is the one to design against: it is the modal outcome, it
+leaves a quarter of the grid alive after the opening, and it is where the
+animation has the most still to do.
+
 - Alive: filled `--teal`, at 90% opacity
 - Just eliminated: flashes `--oxblood` for 140ms, then drops to a 1px `--rule`
   outline with a transparent center. Punched out, not deleted. The card keeps

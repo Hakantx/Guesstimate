@@ -208,6 +208,59 @@ inferior and a worst-case-only table makes it look equal, and the interesting
 fact is that it is simultaneously both. A table that also states its variant is
 the minimum needed for any of it to be checkable.
 
+## Both sides of this project play greedily
+
+Phase 7 added the adversarial codemaker, and it turns out to make the same
+compromise in the opposite direction.
+
+It answers a guess with whichever reply leaves the most codes alive. That is
+the natural greedy rule and it is not the optimal one, for the same reason
+greedy solving is not: **maximising the candidates remaining is not maximising
+the guesses remaining.** A smaller surviving set can be the harder position to
+finish from, if the codes in it are mutually difficult to tell apart. An
+optimal adversary would search the game tree for the reply that costs the
+player the most turns — the same computation, in the same shape, that the
+solvers decline to do.
+
+There is no published optimum for an adversary to check that against. But on a
+ruleset small enough, the whole game tree can be searched: what could a perfect
+adversary force, playing against a perfect player? That is a bound nothing has
+to be sampled for, and it costs seconds.
+
+| Ruleset | Codes | Optimal adversary | Greedy adversary | Gap |
+|---|---|---|---|---|
+| 2 over 3 | 6 | 3 | 3 | 0 |
+| 2 over 4 | 12 | 3 | 3 | 0 |
+| 2 over 5 | 20 | 4 | 4 | 0 |
+| 2 over 4, repeats | 16 | 4 | 4 | 0 |
+| 3 over 4 | 24 | 4 | 4 | 0 |
+| 3 over 5 | 60 | 4 | 4 | 0 |
+| 4 over 4 | 24 | 5 | 5 | 0 |
+| 2 over 6 | 30 | 4 | 4 | 0 |
+| **3 over 3, repeats** | **27** | **4** | **3** | **+1** |
+
+The answer is not the one the symmetry suggested. Greedy is *optimal* on eight
+of the nine rulesets searched — keeping the largest block happens to be exactly
+right almost everywhere small enough to check. On the ninth it costs a full
+guess: a perfect adversary can hold out for four where the greedy one is
+cornered in three.
+
+So the honest statement is narrower and more interesting than "both sides play
+greedily and both give something up". Greedy is usually perfect for the
+adversary and occasionally is not, and which case a ruleset falls into is only
+visible by computing the alternative. The one place it fails is a ruleset with
+repeats and a small alphabet — the same corner where the reachable outcome set
+stops matching the naive triangle, which is probably not a coincidence.
+
+The measurement is a test rather than a script, so the numbers are checked on
+every run, and it includes a cross-check that the search models the adversary
+actually shipped rather than an idealised twin of it.
+
+What stays true is the shape: the solver gives up a guess in the worst case
+against a published optimum, and the adversary gives up a guess on at least one
+ruleset against a computed one. Two independent greedy players, each locally
+right and each occasionally globally wrong.
+
 <sub>Guess counts above are exact over every secret. The 5040 sweep's wall-clock
 timings are not published: it ran alongside another sweep on a two-core machine
 and its timings are contended. Counts are unaffected by that.</sub>
