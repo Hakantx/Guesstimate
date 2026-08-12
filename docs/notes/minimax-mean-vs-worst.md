@@ -261,6 +261,46 @@ against a published optimum, and the adversary gives up a guess on at least one
 ruleset against a computed one. Two independent greedy players, each locally
 right and each occasionally globally wrong.
 
+### A conjecture, and the grid search that killed it
+
+The obvious explanation for the one failure was that it looked like a familiar
+corner. Greedy fails on three positions over three symbols with repeats, and
+that is also the region where the reachable outcome set stops matching the
+naive bulls-plus-cows triangle — few symbols make the distribution of outcomes
+lumpy, so equal-sized blocks stop being interchangeable and picking the largest
+stops being a good proxy for picking the hardest. The prediction that falls out
+of it is testable: **greedy should fail more often as the alphabet shrinks
+relative to the code length.**
+
+It does not.
+
+| Length | Alphabet | Repeats | Codes | A/L | Gap |
+|---|---|---|---|---|---|
+| 5 | 2 | yes | 32 | 0.40 | 0 |
+| 4 | 2 | yes | 16 | 0.50 | 0 |
+| 3 | 2 | yes | 8 | 0.67 | 0 |
+| 2 | 2 | yes | 4 | 1.00 | 0 |
+| 3 | 3 | no | 6 | 1.00 | 0 |
+| **3** | **3** | **yes** | **27** | **1.00** | **+1** |
+| 3 | 4 | yes | 64 | 1.33 | 0 |
+| 2 | 6 | yes | 36 | 3.00 | 0 |
+
+Seventeen rulesets searched exhaustively, one gap. The three most extreme
+alphabet-to-length ratios — 0.40, 0.50, 0.67, exactly where the conjecture
+predicts the most trouble — show no gap at all, and the single failure sits at a
+middling 1.00 alongside two other ratio-1.00 rulesets that are fine.
+
+So the prediction is contradicted on its own terms. What it is *not* is
+replaced: one positive example in seventeen is far too little to fit any other
+pattern to, and the honest position is that greedy's occasional failure is
+currently unexplained rather than explained differently. Ruling out the first
+plausible story is worth more than it sounds, because that story was going to
+end up in the README otherwise.
+
+The search is bounded by the exhaustive tree, which is exponential — 64 codes
+took a minute and 125 was not worth waiting for — so extending this means a
+better search rather than more patience.
+
 <sub>Guess counts above are exact over every secret. The 5040 sweep's wall-clock
 timings are not published: it ran alongside another sweep on a two-core machine
 and its timings are contended. Counts are unaffected by that.</sub>
