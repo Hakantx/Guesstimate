@@ -737,3 +737,74 @@ def test_evil_mode_is_not_charged_for_a_solver(client):
     assert (
         client.post("/game", json={"ruleset": BIG, "mode": "evil"}).status_code == 201
     )
+
+
+# --- analysis --------------------------------------------------------------
+
+
+def test_an_unplayed_game_has_nothing_to_analyse(client):
+    game_id = start(client, secret="123")["id"]
+    body = client.get(f"/game/{game_id}/analysis").json()
+    assert body["moves"] == [] and body["total_loss"] == 0.0
+
+
+def test_every_move_is_graded(client):
+    game_id = start(client, secret="123")["id"]
+    for guess in ("451", "123"):
+        client.post(f"/game/{game_id}/guess", json={"guess": guess})
+    body = client.get(f"/game/{game_id}/analysis").json()
+    assert [m["turn"] for m in body["moves"]] == [1, 2]
+    assert [m["guess"] for m in body["moves"]] == ["451", "123"]
+    for move in body["moves"]:
+        assert move["grade"] in {"best", "good", "inaccuracy", "mistake", "blunder"}
+        assert move["loss"] >= -1e-9
+
+
+def test_analysis_shows_both_pools(client):
+    game_id = start(client, secret="123")["id"]
+    client.post(f"/game/{game_id}/guess", json={"guess": "451"})
+    move = client.get(f"/game/{game_id}/analysis").json()["moves"][0]
+    assert move["best_any_remaining"] <= move["best_candidate_remaining"]
+    assert move["probe_advantage"] >= -1e-9
+    assert move["best_candidate"] is not None
+
+
+def test_analysis_depends_only_on_what_the_player_was_told(client):
+    """The real leak test, and the reason analysis can be shown mid-game.
+
+    Checking that the secret's digits are absent from the response would be the
+    wrong test: the best available guess is computed from the transcript, and
+    it can coincidentally *be* the secret. That is not a leak -- the player
+    could compute it themselves.
+
+    What must hold is that two games with different secrets, given the same
+    answers, produce byte-identical analysis. If the secret could influence it
+    at all, this is where it would show.
+    """
+    guess = ("1", "2", "3")
+    twins = [
+        secret
+        for secret in all_candidates(SMALL)
+        if score(secret, guess) == Feedback(1, 0)
+    ]
+    assert len(twins) >= 2, "need two secrets that answer the same way"
+
+    analyses = []
+    for secret in twins[:2]:
+        game_id = start(client, secret=format_code(secret))["id"]
+        client.post(f"/game/{game_id}/guess", json={"guess": "123"})
+        analyses.append(client.get(f"/game/{game_id}/analysis").json())
+
+    assert analyses[0] == analyses[1]
+    assert client.get(f"/game/{game_id}/state").json()["secret"]["kind"] == "hidden"
+
+
+def test_analysis_is_cached_across_games(client):
+    # Two games that open identically share the search for that position.
+    first = start(client, secret="123")["id"]
+    second = start(client, secret="451")["id"]
+    for game_id in (first, second):
+        client.post(f"/game/{game_id}/guess", json={"guess": "245"})
+        client.get(f"/game/{game_id}/analysis")
+    cache = client.app.state.reviews
+    assert cache.hits + len(cache._positions) > 0

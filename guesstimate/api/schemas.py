@@ -219,6 +219,51 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
+class MoveReviewSchema(BaseModel):
+    """One graded move."""
+
+    turn: int
+    guess: str
+    feedback: str
+    survivors_before: int
+    survivors_after: int
+    eliminated: int = Field(
+        description=(
+            "How many codes this guess actually removed. Reported, never "
+            "ranked on: the realized figure depends on which block the answer "
+            "landed in, which is luck. A lopsided guess can remove more on a "
+            "lucky answer while being much the worse guess."
+        )
+    )
+    expected_remaining: float = Field(
+        description=(
+            "Codes still standing after this guess, in expectation, with the "
+            "winning answer counted as none remaining. Lower is better."
+        )
+    )
+    bits_gained: float
+    best_candidate_remaining: float
+    best_any_remaining: float
+    best_candidate: str | None
+    best_any: str | None
+    probe_advantage: float = Field(
+        description=(
+            "What the best non-candidate probe would have bought over the best "
+            "guess that could itself win. Explanatory, not graded on."
+        )
+    )
+    loss: float
+    grade: str
+
+
+class AnalysisResponse(BaseModel):
+    """A finished game, move by move."""
+
+    moves: list[MoveReviewSchema]
+    total_loss: float
+    mean_loss: float
+
+
 class RaceTurnSchema(BaseModel):
     """One turn by the solver in a race, scored against the shared secret."""
 

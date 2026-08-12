@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
-from guesstimate.core import Feedback, format_code, parse_code
+from guesstimate.core import Feedback, Ruleset, format_code, parse_code
 from guesstimate.game import (
     GameOverError,
     LocalCodebreakerGame,
@@ -26,7 +26,12 @@ from guesstimate.game import (
     ScoredGame,
     SolverBackedGame,
 )
-from guesstimate.solvers import SOLVERS, InconsistentFeedbackError
+from guesstimate.review import ReviewCache, review_game
+from guesstimate.solvers import (
+    SOLVERS,
+    InconsistentFeedbackError,
+    Partitioner,
+)
 
 from .limits import (
     DEFAULT_MAX_SPACE,
@@ -37,18 +42,33 @@ from .limits import (
     outcomes_for,
 )
 from .schemas import (
+    AnalysisResponse,
     CandidatesResponse,
     ErrorCode,
     ErrorResponse,
     FeedbackRequest,
     GameStateSchema,
     GuessRequest,
+    MoveReviewSchema,
     NewGameRequest,
     RaceTurnSchema,
     SolverTurnResultSchema,
     TurnResultSchema,
 )
 from .sessions import Session, SessionStore
+
+
+def _partitioner_for(ruleset: Ruleset) -> Partitioner:
+    """The fastest partitioner this ruleset can afford, for analysis.
+
+    Review re-searches every position, so on the classic ruleset it wants the
+    matrix. `choose_partitioner` falls back to on-demand scoring when a matrix
+    is not affordable, which keeps a large ruleset slow rather than impossible.
+    """
+    from guesstimate.data import choose_partitioner
+
+    partitioner, _ = choose_partitioner(ruleset)
+    return partitioner
 
 
 def _error(status: int, code: ErrorCode, detail: str) -> JSONResponse:
@@ -80,6 +100,11 @@ def create_app(
     app.state.limiter = limiter if limiter is not None else RateLimiter()
     app.state.max_space = max_space
     app.state.start_budget = start_budget
+    # Reviews are keyed on the transcript, not the session: two players who
+    # open the same way share the search, and a finished game re-analysed costs
+    # nothing. That matters in Phase 9, where a daily puzzle means thousands of
+    # transcripts with the same first few moves.
+    app.state.reviews = ReviewCache()
 
     @app.middleware("http")
     async def _rate_limit(
@@ -289,6 +314,65 @@ def create_app(
         if not isinstance(game, SolverBackedGame):
             raise _Refusal(409, "wrong_mode", f"{session.mode} mode has no solver")
         return {"guess": format_code(game.solver_guess())}
+
+    @app.get(
+        "/game/{game_id}/analysis",
+        response_model=AnalysisResponse,
+        responses=on_game,
+    )
+    def get_analysis(
+        game_id: str, session: Session = Depends(require_session)
+    ) -> AnalysisResponse:
+        """Grade every move against the position it was played from.
+
+        Available before the game ends as well as after. Nothing here reads the
+        secret -- the analysis is a function of what the player was told -- so
+        showing it early reveals only what they could already work out.
+        """
+        state = session.game.state
+        turns = [(turn.guess, turn.feedback) for turn in state.turns]
+        if not turns:
+            return AnalysisResponse(moves=[], total_loss=0.0, mean_loss=0.0)
+
+        reviews = review_game(
+            state.ruleset,
+            turns,
+            partitioner=_partitioner_for(state.ruleset),
+            cache=app.state.reviews,
+        )
+        losses = [review.loss for review in reviews]
+        return AnalysisResponse(
+            moves=[
+                MoveReviewSchema(
+                    turn=review.turn,
+                    guess=format_code(review.guess),
+                    feedback=str(review.feedback),
+                    survivors_before=review.survivors_before,
+                    survivors_after=review.survivors_after,
+                    eliminated=review.eliminated,
+                    expected_remaining=review.expected_remaining,
+                    bits_gained=review.bits_gained,
+                    best_candidate_remaining=review.best_candidate_remaining,
+                    best_any_remaining=review.best_any_remaining,
+                    best_candidate=(
+                        None
+                        if review.best_candidate is None
+                        else format_code(review.best_candidate)
+                    ),
+                    best_any=(
+                        None
+                        if review.best_any is None
+                        else format_code(review.best_any)
+                    ),
+                    probe_advantage=review.probe_advantage,
+                    loss=review.loss,
+                    grade=str(review.grade),
+                )
+                for review in reviews
+            ],
+            total_loss=sum(losses),
+            mean_loss=sum(losses) / len(losses),
+        )
 
     @app.post(
         "/game/{game_id}/solver-turn",

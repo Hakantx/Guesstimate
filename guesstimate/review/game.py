@@ -7,10 +7,11 @@ from dataclasses import dataclass
 
 from guesstimate.core import Code, Feedback, Ruleset
 from guesstimate.solvers import Partitioner, PurePartitioner
-from guesstimate.solvers.partitioner import CodeIndex
+from guesstimate.solvers.partitioner import CandidateSet, CodeIndex
 
+from .cache import ReviewCache, transcript_key
 from .grades import Grade, grade_for
-from .metrics import best_at, bits_gained, expected_remaining
+from .metrics import Best, best_at, bits_gained, expected_remaining
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ def review_game(
     ruleset: Ruleset,
     turns: Sequence[tuple[Code, Feedback]],
     partitioner: Partitioner | None = None,
+    cache: ReviewCache | None = None,
 ) -> list[MoveReview]:
     """Score every move in a finished game.
 
@@ -60,6 +62,13 @@ def review_game(
     longer reach would charge them twice for one mistake. Chess engines score
     against the board in front of you, and so does this.
     """
+    if cache is not None:
+        key = transcript_key(ruleset, turns)
+        remembered = cache.review(key)
+        if remembered is not None:
+            assert isinstance(remembered, list)
+            return list(remembered)
+
     engine = PurePartitioner(ruleset) if partitioner is None else partitioner
     space = engine.universe()
     survivors = engine.universe()
@@ -73,7 +82,7 @@ def review_game(
         sizes = engine.sizes(index, survivors)
         value = expected_remaining(sizes, before, index in alive)
         bits = bits_gained(sizes, before)
-        best = best_at(engine, survivors, space)
+        best = _best_here(engine, survivors, space, cache)
 
         survivors = engine.block(index, survivors, feedback)
         after = len(survivors)
@@ -97,7 +106,50 @@ def review_game(
                 grade=grade_for(loss, before),
             )
         )
+
+    if cache is not None:
+        cache.remember(transcript_key(ruleset, turns), reviews)
     return reviews
+
+
+def _best_here(
+    engine: Partitioner,
+    survivors: CandidateSet,
+    space: CandidateSet,
+    cache: ReviewCache | None,
+) -> Best:
+    """Search a position, or recall it.
+
+    This is where the caching earns its keep. Every game on a ruleset starts
+    from the same position, so the opening search happens once for all of them;
+    two transcripts that diverge later still share every position before the
+    divergence.
+    """
+    if cache is None:
+        return best_at(engine, survivors, space)
+
+    key = tuple(int(index) for index in survivors)
+    remembered = cache.position(key)
+    if remembered is not None:
+        among_candidates, among_all, candidate, any_index = remembered
+        return Best(
+            among_candidates=among_candidates,
+            among_all=among_all,
+            best_candidate=None if candidate is None else CodeIndex(candidate),
+            best_any=None if any_index is None else CodeIndex(any_index),
+        )
+
+    found = best_at(engine, survivors, space)
+    cache.remember_position(
+        key,
+        (
+            found.among_candidates,
+            found.among_all,
+            None if found.best_candidate is None else int(found.best_candidate),
+            None if found.best_any is None else int(found.best_any),
+        ),
+    )
+    return found
 
 
 def _position_of(engine: Partitioner, code: Code) -> int:

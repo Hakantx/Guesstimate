@@ -1,5 +1,6 @@
 """Phase 8: what a move was worth, and whether the metric can be trusted."""
 
+import math
 import random
 
 import pytest
@@ -224,3 +225,128 @@ def test_random_play_spreads_across_the_bands():
 
     assert len(seen) >= 3, f"random play only ever graded {seen}"
     assert Grade.BEST in seen
+
+
+# --- worked by hand --------------------------------------------------------
+
+
+def test_a_position_computed_on_paper():
+    """The check the solver cross-check structurally cannot make.
+
+    `expected-size` scoring a perfect 100% shows the review and the solver
+    agree. It cannot show they are both right, because the metric *is* that
+    solver's objective -- if both implemented the same wrong definition, the
+    agreement would be exactly as clean. So one position is worked out by hand.
+
+    Ruleset: two positions over the symbols 1, 2, 3, no repeats. Six codes:
+
+        12  13  21  23  31  32
+
+    Guess `12`. Scoring each candidate against it by hand:
+
+        12 -> +2-0   both digits in place                 (the win)
+        13 -> +1-0   the 1 is in place, the 3 is absent
+        32 -> +1-0   the 2 is in place, the 3 is absent
+        21 -> +0-2   both digits present, both misplaced
+        23 -> +0-1   the 2 is present but misplaced
+        31 -> +0-1   the 1 is present but misplaced
+
+    Four blocks: {12}, {13, 32}, {21}, {23, 31} -- sizes 1, 2, 1, 2, summing to
+    the six candidates.
+
+        expected remaining = (2^2 + 1^2 + 2^2) / 6 = 9 / 6 = 1.5
+
+    The winning block contributes nothing, which is the whole correction: after
+    "+2-0" there is no candidate left to face. Including it would give 10/6,
+    about 1.667, and would be answering a different question.
+
+        bits gained = -[2*(1/6)log2(1/6) + 2*(2/6)log2(2/6)]
+                    = (1/3)*log2(6) + (2/3)*log2(3)
+                    = 0.8617 + 1.0566 = 1.9183
+    """
+    ruleset = Ruleset(2, "123")
+    guess = parse_code("12", ruleset)
+
+    blocks: dict[Feedback, int] = {}
+    for candidate in all_candidates(ruleset):
+        outcome = score(candidate, guess)
+        blocks[outcome] = blocks.get(outcome, 0) + 1
+
+    assert sorted(blocks.values()) == [1, 1, 2, 2]
+    assert sum(blocks.values()) == 6
+
+    sizes = list(blocks.values())
+    assert expected_remaining(sizes, 6, wins=True) == pytest.approx(1.5)
+    assert expected_remaining(sizes, 6, wins=False) == pytest.approx(10 / 6)
+
+    expected_bits = (1 / 3) * math.log2(6) + (2 / 3) * math.log2(3)
+    assert bits_gained(sizes, 6) == pytest.approx(expected_bits)
+    assert bits_gained(sizes, 6) == pytest.approx(1.9183, abs=1e-4)
+
+
+# --- caching ---------------------------------------------------------------
+
+
+def test_the_cache_is_keyed_on_the_transcript_not_the_game():
+    # Analysis is a pure function of what the player was told, so two games
+    # with different secrets that produced the same answers are one analysis.
+    from guesstimate.review import ReviewCache, transcript_key
+
+    turns = [(parse_code("123", SMALL), Feedback(1, 0))]
+    assert transcript_key(SMALL, turns) == transcript_key(SMALL, list(turns))
+    assert transcript_key(SMALL, turns) != transcript_key(Ruleset(3, "123456"), turns)
+
+    cache = ReviewCache()
+    first = review_game(SMALL, turns, cache=cache)
+    assert cache.misses >= 1
+    second = review_game(SMALL, turns, cache=cache)
+    assert cache.hits >= 1
+    assert [r.loss for r in first] == [r.loss for r in second]
+
+
+def test_two_games_share_the_positions_they_have_in_common():
+    # The level that actually pays: every game on a ruleset opens from the same
+    # position, and transcripts that diverge later still share what came before.
+    from guesstimate.review import ReviewCache
+
+    cache = ReviewCache()
+    opening = parse_code("123", SMALL)
+    review_game(SMALL, [(opening, Feedback(1, 0))], cache=cache)
+    searched = len(cache._positions)
+
+    # A different game with the same opening: the opening position is not
+    # searched again.
+    review_game(SMALL, [(opening, Feedback(0, 1))], cache=cache)
+    assert len(cache._positions) >= searched
+    positions_after_one_more = len(cache._positions)
+    review_game(SMALL, [(opening, Feedback(2, 0))], cache=cache)
+    assert len(cache._positions) == positions_after_one_more, (
+        "a third game with the same opening searched a position again"
+    )
+
+
+def test_caching_changes_nothing_but_speed():
+    from guesstimate.review import ReviewCache
+
+    secret = parse_code("541", SMALL)
+    turns = []
+    for text in ("123", "245", "541"):
+        guess = parse_code(text, SMALL)
+        turns.append((guess, score(secret, guess)))
+
+    plain = review_game(SMALL, turns)
+    cached = review_game(SMALL, turns, cache=ReviewCache())
+    assert [(r.loss, r.grade, r.expected_remaining) for r in plain] == [
+        (r.loss, r.grade, r.expected_remaining) for r in cached
+    ]
+
+
+def test_the_cache_is_bounded():
+    from guesstimate.review import ReviewCache
+
+    cache = ReviewCache(max_entries=4)
+    for n in range(20):
+        cache.remember((n, "x", False, ()), [])
+        cache.remember_position((n,), (0.0, 0.0, None, None))
+    assert len(cache._reviews) <= 4
+    assert len(cache._positions) <= 4
