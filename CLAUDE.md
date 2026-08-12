@@ -137,10 +137,12 @@ guesstimate/
   core/          alphabet, candidates, scoring, feedback types. zero I/O.
   solvers/       one file per strategy + the shared protocol
   data/          feedback matrix + opening book: build, cache, load. does I/O.
+  review/        post-game analysis: what each guess was worth. zero I/O.
   bench/         benchmark harness, result tables, chart generation
   eval/          LLM-as-player harness
   api/           FastAPI routes, thin wrappers over core + solvers
   cli/           terminal version
+  game/          the Game interface and its local implementations. zero I/O.
 web/             React app
 data/            precomputed feedback matrix, opening book (gitignored, built)
 docs/            benchmarks, design notes, the how-it-works writeup
