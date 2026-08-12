@@ -106,6 +106,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/game/{game_id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Analysis
+         * @description Grade every move against the position it was played from.
+         *
+         *     Available before the game ends as well as after. Nothing here reads the
+         *     secret -- the analysis is a function of what the player was told -- so
+         *     showing it early reveals only what they could already work out.
+         */
+        get: operations["get_analysis_game__game_id__analysis_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/game/{game_id}/solver-turn": {
         parameters: {
             query?: never;
@@ -154,6 +178,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnalysisResponse
+         * @description A finished game, move by move.
+         */
+        AnalysisResponse: {
+            /** Moves */
+            moves: components["schemas"]["MoveReviewSchema"][];
+            /** Total Loss */
+            total_loss: number;
+            /** Mean Loss */
+            mean_loss: number;
+        };
         /**
          * CandidatesResponse
          * @description Surviving candidates, as positions in `all_candidates(ruleset)`.
@@ -226,6 +262,56 @@ export interface components {
         GuessRequest: {
             /** Guess */
             guess: string;
+        };
+        /**
+         * MoveReviewSchema
+         * @description One graded move.
+         */
+        MoveReviewSchema: {
+            /** Turn */
+            turn: number;
+            /** Guess */
+            guess: string;
+            /** Feedback */
+            feedback: string;
+            /** Survivors Before */
+            survivors_before: number;
+            /** Survivors After */
+            survivors_after: number;
+            /**
+             * Eliminated
+             * @description How many codes this guess actually removed. Reported, never ranked on: the realized figure depends on which block the answer landed in, which is luck. A lopsided guess can remove more on a lucky answer while being much the worse guess.
+             */
+            eliminated: number;
+            /**
+             * Expected Remaining
+             * @description Codes still standing after this guess, in expectation, with the winning answer counted as none remaining. Lower is better.
+             */
+            expected_remaining: number;
+            /** Bits Gained */
+            bits_gained: number;
+            /** Best Candidate Remaining */
+            best_candidate_remaining: number;
+            /** Best Any Remaining */
+            best_any_remaining: number;
+            /** Best Candidate */
+            best_candidate: string | null;
+            /** Best Any */
+            best_any: string | null;
+            /**
+             * Probe Advantage
+             * @description What the best non-candidate probe would have bought over the best guess that could itself win. Explanatory, not graded on.
+             */
+            probe_advantage: number;
+            /**
+             * Probe Matters
+             * @description Whether the probe was better by enough to be worth showing. False on most turns, when the best guess overall is simply the best candidate and the two numbers are identical.
+             */
+            probe_matters: boolean;
+            /** Loss */
+            loss: number;
+            /** Grade */
+            grade: string;
         };
         /**
          * NewGameRequest
@@ -591,6 +677,64 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description No such game */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Wrong mode, or already over */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_analysis_game__game_id__analysis_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                game_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisResponse"];
                 };
             };
             /** @description No such game */

@@ -43,6 +43,12 @@ BANDS: tuple[tuple[float, Grade], ...] = (
 )  # beyond that, a blunder
 
 
+#: The smallest loss share that costs a move its perfect grade. Reused as the
+#: bar for "is this difference worth mentioning at all", so the interface does
+#: not need a second opinion about what counts as significant.
+NOTICEABLE = BANDS[1][0]
+
+
 def grade_for(loss: float, survivors: int) -> Grade:
     """Grade a move by how much it gave up, relative to the position."""
     if survivors <= 1:

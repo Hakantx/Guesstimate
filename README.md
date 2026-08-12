@@ -38,7 +38,7 @@ never modified.
 | 5 | Make it fast | done |
 | 6 | API and game server | done |
 | 7 | The web app | done |
-| 8 | Game review | |
+| 8 | Game review | done |
 | 9 | Shareability | |
 | 10 | LLM evaluation | |
 | 11 | Ship | |

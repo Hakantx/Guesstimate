@@ -252,6 +252,13 @@ class MoveReviewSchema(BaseModel):
             "guess that could itself win. Explanatory, not graded on."
         )
     )
+    probe_matters: bool = Field(
+        description=(
+            "Whether the probe was better by enough to be worth showing. False "
+            "on most turns, when the best guess overall is simply the best "
+            "candidate and the two numbers are identical."
+        )
+    )
     loss: float
     grade: str
 

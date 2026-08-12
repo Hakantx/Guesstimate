@@ -6,6 +6,8 @@ export type TurnResult = Schemas["TurnResultSchema"];
 export type SolverTurnResult = Schemas["SolverTurnResultSchema"];
 export type Candidates = Schemas["CandidatesResponse"];
 export type NewGame = Schemas["NewGameRequest"];
+export type Analysis = Schemas["AnalysisResponse"];
+export type MoveReview = Schemas["MoveReviewSchema"];
 
 /**
  * The server's refusal codes, straight from the generated schema.
@@ -93,6 +95,9 @@ export const api = {
 
   solverGuess: (id: string) =>
     request<{ guess: string }>(`/game/${id}/solver-guess`),
+
+  analysis: (id: string) =>
+    request<Schemas["AnalysisResponse"]>(`/game/${id}/analysis`),
 
   solverTurn: (id: string) =>
     request<Schemas["RaceTurnSchema"]>(`/game/${id}/solver-turn`, {

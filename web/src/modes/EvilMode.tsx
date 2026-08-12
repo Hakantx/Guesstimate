@@ -1,3 +1,4 @@
+import { ReviewPanel } from "../review/ReviewPanel";
 import { Announcer } from "../board/Announcer";
 import { Board } from "../board/Board";
 import { Sparkline } from "../board/Sparkline";
@@ -60,6 +61,7 @@ export function EvilMode() {
             <button className="primary" type="button" onClick={() => void game.restart()}>
               Again
             </button>
+            <ReviewPanel gameId={game.state.id} />
           </div>
         ) : (
           <GuessInput

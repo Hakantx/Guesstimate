@@ -365,6 +365,7 @@ def create_app(
                         else format_code(review.best_any)
                     ),
                     probe_advantage=review.probe_advantage,
+                    probe_matters=review.probe_matters,
                     loss=review.loss,
                     grade=str(review.grade),
                 )

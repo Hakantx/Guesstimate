@@ -10,7 +10,7 @@ from guesstimate.solvers import Partitioner, PurePartitioner
 from guesstimate.solvers.partitioner import CandidateSet, CodeIndex
 
 from .cache import ReviewCache, transcript_key
-from .grades import Grade, grade_for
+from .grades import NOTICEABLE, Grade, grade_for
 from .metrics import Best, best_at, bits_gained, expected_remaining
 
 
@@ -36,6 +36,21 @@ class MoveReview:
     best_any: Code | None
     loss: float
     grade: Grade
+
+    @property
+    def probe_matters(self) -> bool:
+        """Whether a non-candidate probe was meaningfully better here.
+
+        Usually it is not: the best guess overall is the best candidate, the
+        two numbers are identical, and a column showing that repeatedly is a
+        column nobody reads. This is true only when choosing the probe would
+        have mattered by the same yardstick used to grade a move, so the
+        interface can surface the case that teaches something and stay quiet
+        the rest of the time.
+        """
+        if self.survivors_before <= 1:
+            return False
+        return self.probe_advantage / self.survivors_before > NOTICEABLE
 
     @property
     def probe_advantage(self) -> float:
